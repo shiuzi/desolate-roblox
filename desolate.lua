@@ -1,8 +1,7 @@
--- Desolate Client v4.2.4
--- Xeno loader via request
--- Added: Gen ESP (mana generators)
+-- Desolate Client v4.2.5
+-- Optimized: cache modules + character, less Heartbeat stress
 
-local VERSION = "4.2.4"
+local VERSION = "4.2.5"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -22,6 +21,36 @@ local Camera           = Workspace.CurrentCamera
 
 local player = Players.LocalPlayer
 
+-- =========================================================
+-- CACHE (character / hrp / humanoid)
+-- =========================================================
+local CACHE = {
+    character = nil, hrp = nil, humanoid = nil, head = nil, isAlive = false,
+}
+local function refreshCharacterCache()
+    local char = player.Character
+    if not char then
+        CACHE.character, CACHE.hrp, CACHE.humanoid, CACHE.head, CACHE.isAlive = nil, nil, nil, nil, false
+        return
+    end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local head = char:FindFirstChild("Head")
+    CACHE.character = char
+    CACHE.humanoid = hum
+    CACHE.hrp = hrp
+    CACHE.head = head
+    CACHE.isAlive = (hum ~= nil) and (hrp ~= nil) and (hum.Health > 0)
+end
+refreshCharacterCache()
+player.CharacterAdded:Connect(function() task.wait(0.1); refreshCharacterCache() end)
+player.CharacterRemoving:Connect(function()
+    CACHE.character, CACHE.hrp, CACHE.humanoid, CACHE.head, CACHE.isAlive = nil, nil, nil, nil, false
+end)
+
+-- =========================================================
+-- HWID
+-- =========================================================
 local function getHwid()
     if gethwid then
         local ok, id = pcall(gethwid)
@@ -40,6 +69,9 @@ local function getHwid()
     return id
 end
 
+-- =========================================================
+-- FS
+-- =========================================================
 local fs = {
     available = (type(writefile) == "function")
         and (type(readfile) == "function")
@@ -63,6 +95,9 @@ function fs.delete(path)
     return pcall(delfile, path)
 end
 
+-- =========================================================
+-- HTTP
+-- =========================================================
 local function httpPost(url, body)
     local payload = HttpService:JSONEncode(body)
     if request then
@@ -97,6 +132,9 @@ local function validateKey(key)
     return true, data
 end
 
+-- =========================================================
+-- AUTH UI
+-- =========================================================
 local function showKeyUI(opts)
     local ACCENT = Color3.fromRGB(0, 200, 230)
     local BG, BG2 = Color3.fromRGB(6, 6, 10), Color3.fromRGB(14, 14, 20)
@@ -191,6 +229,9 @@ local function requireAuth()
 end
 if not requireAuth() then return end
 
+-- =========================================================
+-- THEMES
+-- =========================================================
 local THEMES = {
     Dark    = { accent = Color3.fromRGB(0, 200, 230), bg = Color3.fromRGB(6, 6, 10),   bg2 = Color3.fromRGB(10, 10, 14),  bg3 = Color3.fromRGB(14, 14, 20),  bg4 = Color3.fromRGB(20, 20, 28),  text = Color3.fromRGB(200, 200, 210), muted = Color3.fromRGB(100, 100, 115) },
     Blood   = { accent = Color3.fromRGB(255, 40, 40), bg = Color3.fromRGB(12, 4, 4),    bg2 = Color3.fromRGB(20, 8, 8),    bg3 = Color3.fromRGB(28, 12, 12),  bg4 = Color3.fromRGB(40, 18, 18),  text = Color3.fromRGB(230, 200, 200), muted = Color3.fromRGB(140, 100, 100) },
@@ -215,6 +256,9 @@ local FONT = Enum.Font.Code
 local OPEN_KEY = Enum.KeyCode.RightShift
 local currentTheme = "Dark"
 
+-- =========================================================
+-- STATE
+-- =========================================================
 local state = {
     Render = {
         { name = "Visuals",          isHeader = true },
@@ -233,14 +277,6 @@ local state = {
         { name = "Show Desolate Users", enabled = false, actions = {} },
         { name = "NameTags",     enabled = false, actions = {} },
         { name = "ESP",          enabled = false, actions = {} },
-
-        { name = "Object ESP",       isHeader = true },
-        { name = "Gen ESP",      enabled = false, actions = {},
-          sliders = {
-            { label = "Range",     min = 50,  max = 2000, value = 500 },
-            { label = "Thickness", min = 0.02, max = 0.3, value = 0.08 },
-          } },
-        { name = "Gen Labels",   enabled = false, actions = {} },
 
         { name = "Effects",          isHeader = true },
         { name = "JumpCircle",   enabled = false, actions = {} },
@@ -302,13 +338,50 @@ local function findMod(cat, name)
     return nil
 end
 
+-- =========================================================
+-- MOD CACHE
+-- =========================================================
+local MOD = {}
+local function cacheModuleRefs()
+    MOD.watermark   = findMod("Render", "Watermark")
+    MOD.fullbright  = findMod("Render", "Fullbright")
+    MOD.customSky   = findMod("Render", "Custom Sky")
+    MOD.skyPreset   = findMod("Render", "Sky Preset")
+    MOD.fog         = findMod("Render", "Fog")
+    MOD.timeChanger = findMod("Render", "Time Changer")
+    MOD.showUsers   = findMod("Render", "Show Desolate Users")
+    MOD.nameTags    = findMod("Render", "NameTags")
+    MOD.esp         = findMod("Render", "ESP")
+    MOD.jumpCircle  = findMod("Render", "JumpCircle")
+    MOD.trails      = findMod("Render", "Trails")
+    MOD.particles   = findMod("Render", "Particles")
+    MOD.chinaHat    = findMod("Render", "China Hat")
+    MOD.damageInd   = findMod("Render", "Damage Ind")
+    MOD.coords      = findMod("HUD", "Coordinates")
+    MOD.targetHUD   = findMod("HUD", "TargetHUD")
+    MOD.crosshair   = findMod("HUD", "Crosshair")
+    MOD.antiAFK     = findMod("Misc", "AntiAFK")
+    MOD.noclip      = findMod("Misc", "Noclip")
+    MOD.autoClicker = findMod("Misc", "AutoClicker")
+    MOD.serverHop   = findMod("Misc", "ServerHop")
+    MOD.resetHUDPos = findMod("Misc", "Reset HUD Pos")
+    MOD.walkSpeed   = findMod("Player", "WalkSpeed")
+    MOD.jumpPower   = findMod("Player", "JumpPower")
+    MOD.fly         = findMod("Player", "Fly")
+    MOD.bunnyHop    = findMod("Player", "BunnyHop")
+    MOD.reach       = findMod("Player", "Reach")
+    MOD.fov         = findMod("Player", "FOV")
+end
+
+-- =========================================================
+-- SYNC
+-- =========================================================
 local syncSet = {}
-local syncMod = findMod("Render", "Show Desolate Users")
 
 local function syncPing()
     task.spawn(function()
         while gui and gui.Parent do
-            if syncMod.enabled then
+            if MOD.showUsers and MOD.showUsers.enabled then
                 pcall(function()
                     httpPost(AUTH_URL .. "/sync", {
                         action = "ping",
@@ -325,7 +398,7 @@ end
 local function syncFetch()
     task.spawn(function()
         while gui and gui.Parent do
-            if syncMod.enabled then
+            if MOD.showUsers and MOD.showUsers.enabled then
                 local body = httpPost(AUTH_URL .. "/sync", {
                     action = "list",
                     jobId = tostring(game.JobId),
@@ -350,6 +423,9 @@ local function isSyncUser(plr)
     return syncSet[tostring(plr.UserId)] == true
 end
 
+-- =========================================================
+-- CONFIG
+-- =========================================================
 local function saveConfig()
     local data = { version = VERSION, theme = currentTheme, modules = {} }
     for cat, list in pairs(state) do
@@ -411,6 +487,9 @@ local function resetConfig()
     end
 end
 
+-- =========================================================
+-- GUI ROOT
+-- =========================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "Desolate_" .. math.random(1, 1e6)
 gui.ResetOnSpawn = false; gui.IgnoreGuiInset = true; gui.DisplayOrder = 999
@@ -591,6 +670,9 @@ task.spawn(function() while gui.Parent do updateProfilePlan(); task.wait(60) end
 
 local currentCat = "Render"
 
+-- ⚡ Cache module refs now that state exists
+cacheModuleRefs()
+
 local function refreshModules()
     for _, c in ipairs(modScroll:GetChildren()) do
         if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end
@@ -736,6 +818,9 @@ local function refreshCategories()
     end
 end
 
+-- =========================================================
+-- SUB MENU (themes)
+-- =========================================================
 local subGui = Instance.new("ScreenGui")
 subGui.Name = "DesolateSub_" .. math.random(1, 1e6)
 subGui.ResetOnSpawn = false; subGui.IgnoreGuiInset = true
@@ -945,6 +1030,9 @@ main:GetPropertyChangedSignal("Visible"):Connect(function()
     if not main.Visible then subMenu.Visible = false end
 end)
 
+-- =========================================================
+-- HUD LAYER
+-- =========================================================
 local hudGui = Instance.new("ScreenGui")
 hudGui.Name = "DesolateHUD_" .. math.random(1, 1e6)
 hudGui.ResetOnSpawn = false; hudGui.IgnoreGuiInset = true
@@ -1019,8 +1107,8 @@ wLabel.Size = UDim2.new(1, -14, 1, 0); wLabel.Font = FONT; wLabel.TextSize = 12
 wLabel.TextXAlignment = Enum.TextXAlignment.Left; wLabel.TextColor3 = TEXT
 wLabel.Text = "Desolate"; wLabel.Parent = watermark
 
-findMod("Render", "Watermark").actions.onToggle = function(on) watermark.Visible = on end
-watermark.Visible = findMod("Render", "Watermark").enabled
+MOD.watermark.actions.onToggle = function(on) watermark.Visible = on end
+watermark.Visible = MOD.watermark.enabled
 makeDraggable(watermark, "watermark", 10, 10)
 
 local coordFrame = Instance.new("Frame")
@@ -1036,7 +1124,7 @@ coordLabel.TextSize = 12; coordLabel.TextXAlignment = Enum.TextXAlignment.Left
 coordLabel.TextColor3 = TEXT; coordLabel.Text = "X: -- Y: -- Z: --"
 coordLabel.Parent = coordFrame
 
-findMod("HUD", "Coordinates").actions.onToggle = function(on) coordFrame.Visible = on end
+MOD.coords.actions.onToggle = function(on) coordFrame.Visible = on end
 makeDraggable(coordFrame, "coords", 10, 60)
 
 local crosshair = Instance.new("Frame")
@@ -1077,7 +1165,7 @@ function buildCrosshair()
     end
 end
 buildCrosshair()
-findMod("HUD", "Crosshair").actions.onToggle = function(on) crosshair.Visible = on end
+MOD.crosshair.actions.onToggle = function(on) crosshair.Visible = on end
 
 -- =========================================================
 -- NAMETAGS
@@ -1126,7 +1214,7 @@ local function createNametag(plr)
     return bb, name, info, hb
 end
 
-findMod("Render", "NameTags").actions.onToggle = function(on)
+MOD.nameTags.actions.onToggle = function(on)
     if on then
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= player and plr.Character then
@@ -1143,10 +1231,10 @@ findMod("Render", "NameTags").actions.onToggle = function(on)
 end
 
 Players.PlayerAdded:Connect(function(plr)
-    if not findMod("Render", "NameTags").enabled then return end
+    if not MOD.nameTags.enabled then return end
     plr.CharacterAdded:Connect(function(char)
         task.wait(0.5)
-        if not findMod("Render", "NameTags").enabled then return end
+        if not MOD.nameTags.enabled then return end
         local bb, n, i, hb = createNametag(plr)
         bb.Adornee = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
         bb.Parent = nametagFolder
@@ -1162,10 +1250,10 @@ Players.PlayerRemoving:Connect(function(plr)
 end)
 
 -- =========================================================
--- ESP (players)
+-- ESP
 -- =========================================================
 local espHighlights = {}
-findMod("Render", "ESP").actions.onToggle = function(on)
+MOD.esp.actions.onToggle = function(on)
     if on then
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= player and plr.Character then
@@ -1185,231 +1273,10 @@ findMod("Render", "ESP").actions.onToggle = function(on)
 end
 
 -- =========================================================
--- GEN ESP (mana generators)
--- =========================================================
-local genKeywords = {
-    "generator", "gen", "mana", "crystal", "fountain",
-    "orb", "essence", "shard", "rune", "altar", "beacon",
-    "pylon", "node", "vein", "core",
-}
-
-local trackedGens = {}   -- [part] = { box = SelectionBox, billboard = BillboardGui }
-local genEspMod = findMod("Render", "Gen ESP")
-local genLabelsMod = findMod("Render", "Gen Labels")
-
-local function isGen(part)
-    if not part:IsA("BasePart") then return false end
-    if part.Name == "" then return false end
-    if part:FindFirstChild("DesolateGenBox") then return false end
-    local n = part.Name:lower()
-    for _, kw in ipairs(genKeywords) do
-        if n:find(kw) then return true end
-    end
-    local parent = part.Parent
-    if parent and not parent:IsA("Workspace") and not parent:IsA("Model")
-        and not parent:IsA("Folder") then
-        local pn = parent.Name:lower()
-        for _, kw in ipairs(genKeywords) do
-            if pn:find(kw) then return true end
-        end
-    end
-    return false
-end
-
-local function addGenESP(part)
-    if trackedGens[part] then return end
-
-    local box = Instance.new("SelectionBox")
-    box.Name = "DesolateGenBox"
-    box.Adornee = part
-    box.Color3 = Color3.fromRGB(255, 220, 60)
-    box.LineThickness = genEspMod.sliders[2] and genEspMod.sliders[2].value or 0.08
-    box.SurfaceTransparency = 1
-    box.Parent = part
-
-    local bb = nil
-    if genLabelsMod.enabled then
-        bb = Instance.new("BillboardGui")
-        bb.Name = "DesolateGenLabel"
-        bb.Adornee = part
-        bb.Size = UDim2.new(0, 200, 0, 30)
-        bb.StudsOffset = Vector3.new(0, 3, 0)
-        bb.AlwaysOnTop = true
-        bb.LightInfluence = 0
-        bb.Parent = part
-
-        local bg = Instance.new("Frame")
-        bg.Size = UDim2.new(1, 0, 1, 0)
-        bg.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
-        bg.BackgroundTransparency = 0.25
-        bg.BorderSizePixel = 0
-        bg.Parent = bb
-        Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 6)
-
-        local accent = Instance.new("Frame")
-        accent.Size = UDim2.new(0, 3, 1, 0)
-        accent.BackgroundColor3 = Color3.fromRGB(255, 220, 60)
-        accent.BorderSizePixel = 0
-        accent.Parent = bg
-        Instance.new("UICorner", accent).CornerRadius = UDim.new(0, 6)
-
-        local lbl = Instance.new("TextLabel")
-        lbl.Name = "Label"
-        lbl.BackgroundTransparency = 1
-        lbl.Position = UDim2.new(0, 10, 0, 0)
-        lbl.Size = UDim2.new(1, -14, 1, 0)
-        lbl.Font = FONT
-        lbl.TextSize = 12
-        lbl.TextColor3 = Color3.fromRGB(255, 220, 60)
-        lbl.TextXAlignment = Enum.TextXAlignment.Center
-        lbl.Text = part.Name
-        lbl.Parent = bg
-    end
-
-    trackedGens[part] = { box = box, billboard = bb, keyword = part.Name }
-end
-
-local function removeGenESP(part)
-    local entry = trackedGens[part]
-    if not entry then return end
-    if entry.box then pcall(function() entry.box:Destroy() end) end
-    if entry.billboard then pcall(function() entry.billboard:Destroy() end) end
-    trackedGens[part] = nil
-end
-
-local function clearAllGenESP()
-    for part in pairs(trackedGens) do
-        removeGenESP(part)
-    end
-    trackedGens = {}
-end
-
-genEspMod.actions.onToggle = function(on)
-    if on then
-        -- scan and add
-        local range = genEspMod.sliders[1] and genEspMod.sliders[1].value or 500
-        local char = player.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if isGen(obj) then
-                local dist = (obj.Position - hrp.Position).Magnitude
-                if dist <= range then addGenESP(obj) end
-            end
-        end
-    else
-        clearAllGenESP()
-    end
-end
-
-genEspMod.actions.onSliderChange = function(idx, v)
-    if idx == 2 then
-        -- thickness
-        for _, entry in pairs(trackedGens) do
-            if entry.box then entry.box.LineThickness = v end
-        end
-    end
-end
-
-genLabelsMod.actions.onToggle = function(on)
-    if on then
-        -- add labels to tracked
-        for part, entry in pairs(trackedGens) do
-            if not entry.billboard then
-                local bb = Instance.new("BillboardGui")
-                bb.Name = "DesolateGenLabel"
-                bb.Adornee = part
-                bb.Size = UDim2.new(0, 200, 0, 30)
-                bb.StudsOffset = Vector3.new(0, 3, 0)
-                bb.AlwaysOnTop = true
-                bb.LightInfluence = 0
-                bb.Parent = part
-
-                local bg = Instance.new("Frame")
-                bg.Size = UDim2.new(1, 0, 1, 0)
-                bg.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
-                bg.BackgroundTransparency = 0.25
-                bg.BorderSizePixel = 0
-                bg.Parent = bb
-                Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 6)
-
-                local accent = Instance.new("Frame")
-                accent.Size = UDim2.new(0, 3, 1, 0)
-                accent.BackgroundColor3 = Color3.fromRGB(255, 220, 60)
-                accent.BorderSizePixel = 0
-                accent.Parent = bg
-                Instance.new("UICorner", accent).CornerRadius = UDim.new(0, 6)
-
-                local lbl = Instance.new("TextLabel")
-                lbl.Name = "Label"
-                lbl.BackgroundTransparency = 1
-                lbl.Position = UDim2.new(0, 10, 0, 0)
-                lbl.Size = UDim2.new(1, -14, 1, 0)
-                lbl.Font = FONT
-                lbl.TextSize = 12
-                lbl.TextColor3 = Color3.fromRGB(255, 220, 60)
-                lbl.TextXAlignment = Enum.TextXAlignment.Center
-                lbl.Text = part.Name
-                lbl.Parent = bg
-
-                entry.billboard = bb
-            end
-        end
-    else
-        for _, entry in pairs(trackedGens) do
-            if entry.billboard then
-                pcall(function() entry.billboard:Destroy() end)
-                entry.billboard = nil
-            end
-        end
-    end
-end
-
--- Background scan loop
-task.spawn(function()
-    while gui.Parent do
-        if genEspMod.enabled then
-            local range = genEspMod.sliders[1] and genEspMod.sliders[1].value or 500
-            local char = player.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                -- cleanup old
-                for part in pairs(trackedGens) do
-                    if not part or not part.Parent then removeGenESP(part) end
-                end
-                -- add new
-                for _, obj in ipairs(Workspace:GetDescendants()) do
-                    if not trackedGens[obj] and isGen(obj) then
-                        local dist = (obj.Position - hrp.Position).Magnitude
-                        if dist <= range then addGenESP(obj) end
-                    end
-                end
-                -- update distances in labels
-                if genLabelsMod.enabled then
-                    for part, entry in pairs(trackedGens) do
-                        if entry.billboard and entry.billboard.Parent then
-                            local bg = entry.billboard:FindFirstChildOfClass("Frame")
-                            if bg then
-                                local lbl = bg:FindFirstChild("Label")
-                                if lbl then
-                                    local d = (part.Position - hrp.Position).Magnitude
-                                    lbl.Text = string.format("%s [%dm]", part.Name, math.floor(d))
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        task.wait(1)
-    end
-end)
-
--- =========================================================
--- JUMP CIRCLE / TRAILS / PARTICLES / SKY / CHINA HAT
+-- JUMP CIRCLE
 -- =========================================================
 local jumpRings = {}
-findMod("Render", "JumpCircle").actions.onToggle = function(on)
+MOD.jumpCircle.actions.onToggle = function(on)
     if not on then
         for _, r in ipairs(jumpRings) do if r.part then r.part:Destroy() end end
         jumpRings = {}
@@ -1418,11 +1285,9 @@ end
 
 local wasOnGround = true
 RunService.Heartbeat:Connect(function()
-    if not findMod("Render", "JumpCircle").enabled then return end
-    local char = player.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not MOD.jumpCircle.enabled then return end
+    local hum = CACHE.humanoid
+    local hrp = CACHE.hrp
     if not hum or not hrp then return end
     local onGround = hum.FloorMaterial ~= Enum.Material.Air
     if wasOnGround and not onGround then
@@ -1452,54 +1317,78 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- =========================================================
+-- TRAILS (optimized: reuse attachment)
+-- =========================================================
+local trailEmitter = nil
 local trailAccum = 0
-RunService.Heartbeat:Connect(function(dt)
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
 
-    if findMod("Render", "Trails").enabled then
-        trailAccum += dt
-        if trailAccum >= 0.05 then
-            trailAccum = 0
-            local att = Instance.new("Attachment")
-            att.Position = Vector3.new(0, -1.5, 0); att.Parent = hrp
-            local emitter = Instance.new("ParticleEmitter")
-            emitter.Texture = "rbxassetid://243098098"
-            emitter.Color = ColorSequence.new(ACCENT)
-            emitter.Size = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.5),
-                NumberSequenceKeypoint.new(1, 0),
-            })
-            emitter.Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.2),
-                NumberSequenceKeypoint.new(1, 1),
-            })
-            emitter.Lifetime = NumberRange.new(0.6)
-            emitter.Rate = 0; emitter.Speed = NumberRange.new(0)
-            emitter.Parent = att; emitter:Emit(3)
-            task.delay(1, function() if att and att.Parent then att:Destroy() end end)
+local function ensureTrailEmitter()
+    if trailEmitter and trailEmitter.Parent then return trailEmitter end
+    local hrp = CACHE.hrp
+    if not hrp then return nil end
+    local att = hrp:FindFirstChild("DesolateTrailAtt")
+    if not att then
+        att = Instance.new("Attachment")
+        att.Name = "DesolateTrailAtt"
+        att.Position = Vector3.new(0, -1.5, 0)
+        att.Parent = hrp
+    end
+    local em = att:FindFirstChild("Emitter")
+    if not em then
+        em = Instance.new("ParticleEmitter")
+        em.Name = "Emitter"
+        em.Texture = "rbxassetid://243098098"
+        em.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.5),
+            NumberSequenceKeypoint.new(1, 0),
+        })
+        em.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.2),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        em.Lifetime = NumberRange.new(0.6)
+        em.Rate = 0
+        em.Speed = NumberRange.new(0)
+        em.Parent = att
+    end
+    trailEmitter = em
+    return em
+end
+
+RunService.Heartbeat:Connect(function(dt)
+    if not MOD.trails.enabled then return end
+    if not CACHE.hrp then return end
+    trailAccum += dt
+    if trailAccum >= 0.06 then
+        trailAccum = 0
+        local em = ensureTrailEmitter()
+        if em then
+            em.Color = ColorSequence.new(ACCENT)
+            em:Emit(2)
         end
     end
 end)
 
-local particlesMod = findMod("Render", "Particles")
+-- =========================================================
+-- PARTICLES
+-- =========================================================
+local function destroyParticlesEmitter()
+    if CACHE.hrp then
+        local att = CACHE.hrp:FindFirstChild("DesolateFallingEmitter")
+        if att then pcall(function() att:Destroy() end) end
+    end
+end
 
 local function buildParticles()
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
+    destroyParticlesEmitter()
+    local hrp = CACHE.hrp
     if not hrp then return end
+    if not MOD.particles.enabled then return end
 
-    local existing = hrp:FindFirstChild("DesolateFallingEmitter")
-    if existing then existing:Destroy() end
-
-    if not particlesMod.enabled then return end
-
-    local rate  = particlesMod.sliders[1].value
-    local speed = particlesMod.sliders[2].value
-    local size  = particlesMod.sliders[3].value
+    local rate  = MOD.particles.sliders[1].value
+    local speed = MOD.particles.sliders[2].value
+    local size  = MOD.particles.sliders[3].value
 
     local att = Instance.new("Attachment")
     att.Name = "DesolateFallingEmitter"
@@ -1531,24 +1420,12 @@ local function buildParticles()
     em.Parent = att
 end
 
-particlesMod.actions.onToggle = function(on)
-    if on then buildParticles()
-    else
-        local char = player.Character
-        if char then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local att = hrp:FindFirstChild("DesolateFallingEmitter")
-                if att then att:Destroy() end
-            end
-        end
-    end
+MOD.particles.actions.onToggle = function(on)
+    if on then buildParticles() else destroyParticlesEmitter() end
 end
 
-particlesMod.actions.onSliderChange = function(idx, v)
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
+MOD.particles.actions.onSliderChange = function(idx, v)
+    local hrp = CACHE.hrp
     if not hrp then return end
     local att = hrp:FindFirstChild("DesolateFallingEmitter")
     if not att then return end
@@ -1568,18 +1445,25 @@ end
 
 player.CharacterAdded:Connect(function()
     task.wait(1)
-    if particlesMod.enabled then buildParticles() end
+    refreshCharacterCache()
+    if MOD.particles.enabled then buildParticles() end
 end)
 
-RunService.Heartbeat:Connect(function()
-    if not particlesMod.enabled then return end
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    if not hrp:FindFirstChild("DesolateFallingEmitter") then buildParticles() end
+-- ⚡ Optimized watchdog: check every 2s instead of every frame
+task.spawn(function()
+    while gui.Parent do
+        task.wait(2)
+        if MOD.particles.enabled and CACHE.hrp then
+            if not CACHE.hrp:FindFirstChild("DesolateFallingEmitter") then
+                buildParticles()
+            end
+        end
+    end
 end)
 
+-- =========================================================
+-- SKY / FOG
+-- =========================================================
 local SKY_PRESETS = {
     { clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
     { clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
@@ -1622,11 +1506,10 @@ local function applySkyPreset(idx)
     Lighting.Brightness = 2
 end
 
-local skyMod = findMod("Render", "Custom Sky")
-skyMod.actions.onToggle = function(on)
+MOD.customSky.actions.onToggle = function(on)
     if on then
         applySkyPreset(currentSkyPreset)
-        Lighting.ClockTime = skyMod.slider.value
+        Lighting.ClockTime = MOD.customSky.slider.value
     else
         if customSkyObj then customSkyObj:Destroy(); customSkyObj = nil end
         pcall(function() Lighting.ClockTime = originalLighting.ClockTime end)
@@ -1635,48 +1518,48 @@ skyMod.actions.onToggle = function(on)
         pcall(function() Lighting.Brightness = originalLighting.Brightness end)
     end
 end
-skyMod.actions.onChange = function(v)
-    if not skyMod.enabled then return end
+MOD.customSky.actions.onChange = function(v)
+    if not MOD.customSky.enabled then return end
     Lighting.ClockTime = v
 end
 
-local fogMod = findMod("Render", "Fog")
-fogMod.actions.onToggle = function(on)
+MOD.fog.actions.onToggle = function(on)
     if on then
-        Lighting.FogStart = 0; Lighting.FogEnd = fogMod.slider.value
-        if not skyMod.enabled then Lighting.FogColor = Color3.fromRGB(40, 45, 65) end
+        Lighting.FogStart = 0; Lighting.FogEnd = MOD.fog.slider.value
+        if not MOD.customSky.enabled then Lighting.FogColor = Color3.fromRGB(40, 45, 65) end
     else
-        if not skyMod.enabled then
+        if not MOD.customSky.enabled then
             pcall(function() Lighting.FogColor = originalLighting.FogColor end)
             pcall(function() Lighting.FogStart = originalLighting.FogStart end)
             pcall(function() Lighting.FogEnd = originalLighting.FogEnd end)
         end
     end
 end
-fogMod.actions.onChange = function(v)
-    if not fogMod.enabled then return end
+MOD.fog.actions.onChange = function(v)
+    if not MOD.fog.enabled then return end
     Lighting.FogStart = 0; Lighting.FogEnd = v
 end
 
-local presetMod = findMod("Render", "Sky Preset")
-presetMod.actions.onToggle = function(on)
+MOD.skyPreset.actions.onToggle = function(on)
     if not on then return end
-    currentSkyPreset = math.floor(presetMod.slider.value)
-    if skyMod.enabled then
+    currentSkyPreset = math.floor(MOD.skyPreset.slider.value)
+    if MOD.customSky.enabled then
         applySkyPreset(currentSkyPreset)
-        Lighting.ClockTime = skyMod.slider.value
+        Lighting.ClockTime = MOD.customSky.slider.value
     end
 end
-presetMod.actions.onChange = function(v)
+MOD.skyPreset.actions.onChange = function(v)
     currentSkyPreset = math.floor(v)
-    if not skyMod.enabled then return end
+    if not MOD.customSky.enabled then return end
     applySkyPreset(currentSkyPreset)
-    Lighting.ClockTime = skyMod.slider.value
+    Lighting.ClockTime = MOD.customSky.slider.value
 end
 
+-- =========================================================
+-- CHINA HAT
+-- =========================================================
 local chinaParts = {}
 local chinaPointLight = nil
-local chinaMod = findMod("Render", "China Hat")
 
 local function destroyChinaHat()
     for _, p in ipairs(chinaParts) do if p and p.Parent then p:Destroy() end end
@@ -1694,8 +1577,8 @@ local function buildChinaHat()
         { y = 0.70, r = 0.10, t = 0.12 },
     }
 
-    local neonVal  = chinaMod.sliders[2] and chinaMod.sliders[2].value or 100
-    local lightVal = chinaMod.sliders[3] and chinaMod.sliders[3].value or 4
+    local neonVal  = MOD.chinaHat.sliders[2] and MOD.chinaHat.sliders[2].value or 100
+    local lightVal = MOD.chinaHat.sliders[3] and MOD.chinaHat.sliders[3].value or 4
     local transparency = 1 - (neonVal / 100) * 0.95
 
     for _, layer in ipairs(layers) do
@@ -1720,10 +1603,10 @@ local function buildChinaHat()
     chinaPointLight.Parent = chinaParts[#chinaParts].part
 end
 
-chinaMod.actions.onToggle = function(on)
+MOD.chinaHat.actions.onToggle = function(on)
     if on then buildChinaHat() else destroyChinaHat() end
 end
-chinaMod.actions.onSliderChange = function(idx, v)
+MOD.chinaHat.actions.onSliderChange = function(idx, v)
     if idx == 2 then
         local transparency = 1 - (v / 100) * 0.95
         for _, entry in ipairs(chinaParts) do
@@ -1740,16 +1623,14 @@ chinaMod.actions.onSliderChange = function(idx, v)
 end
 
 RunService.Heartbeat:Connect(function()
-    if not chinaMod.enabled then return end
-    local char = player.Character
-    if not char then return end
-    local head = char:FindFirstChild("Head")
+    if not MOD.chinaHat.enabled then return end
+    local head = CACHE.head
     if not head then return end
     if not chinaParts[1] or not chinaParts[1].part.Parent then
         buildChinaHat(); return
     end
-    local dist = chinaMod.sliders[1] and chinaMod.sliders[1].value or 1.6
-    local neonVal = chinaMod.sliders[2] and chinaMod.sliders[2].value or 100
+    local dist = MOD.chinaHat.sliders[1] and MOD.chinaHat.sliders[1].value or 1.6
+    local neonVal = MOD.chinaHat.sliders[2] and MOD.chinaHat.sliders[2].value or 100
     local transparency = 1 - (neonVal / 100) * 0.95
     local t = tick()
     local baseCF = head.CFrame * CFrame.new(0, dist + math.sin(t * 2) * 0.06, 0)
@@ -1762,16 +1643,21 @@ RunService.Heartbeat:Connect(function()
     if chinaPointLight then chinaPointLight.Color = ACCENT end
 end)
 
-local timeMod = findMod("Render", "Time Changer")
-timeMod.actions.onToggle = function(on)
-    if on then Lighting.ClockTime = timeMod.slider.value
+-- =========================================================
+-- TIME CHANGER
+-- =========================================================
+MOD.timeChanger.actions.onToggle = function(on)
+    if on then Lighting.ClockTime = MOD.timeChanger.slider.value
     else pcall(function() Lighting.ClockTime = originalLighting.ClockTime end) end
 end
-timeMod.actions.onChange = function(v)
-    if not timeMod.enabled then return end
+MOD.timeChanger.actions.onChange = function(v)
+    if not MOD.timeChanger.enabled then return end
     Lighting.ClockTime = v
 end
 
+-- =========================================================
+-- DAMAGE INDICATOR
+-- =========================================================
 local damageIndGui = Instance.new("ScreenGui")
 damageIndGui.Name = "DesolateDmg"
 damageIndGui.ResetOnSpawn = false; damageIndGui.IgnoreGuiInset = true
@@ -1802,12 +1688,10 @@ local function showDamageIndicator(dmg)
     task.delay(0.9, function() if lbl and lbl.Parent then lbl:Destroy() end end)
 end
 
-findMod("Render", "Damage Ind").actions.onToggle = function(on)
+MOD.damageInd.actions.onToggle = function(on)
     if on then
         healthConn = RunService.Heartbeat:Connect(function()
-            local char = player.Character
-            if not char then return end
-            local hum = char:FindFirstChildOfClass("Humanoid")
+            local hum = CACHE.humanoid
             if not hum then return end
             if lastHealth == nil then lastHealth = hum.Health; return end
             if hum.Health < lastHealth then
@@ -1822,6 +1706,9 @@ findMod("Render", "Damage Ind").actions.onToggle = function(on)
     end
 end
 
+-- =========================================================
+-- TARGET HUD
+-- =========================================================
 local targetHud = Instance.new("Frame")
 targetHud.Size = UDim2.new(0, 220, 0, 70)
 targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
@@ -1858,12 +1745,12 @@ thBar.BackgroundColor3 = ERROR
 thBar.BorderSizePixel = 0; thBar.Parent = thBarBg
 Instance.new("UICorner", thBar).CornerRadius = UDim.new(0, 6)
 
-findMod("HUD", "TargetHUD").actions.onToggle = function(on) targetHud.Visible = on end
+MOD.targetHUD.actions.onToggle = function(on) targetHud.Visible = on end
 makeDraggable(targetHud, "targethud")
 
 local function getTarget()
     local params = RaycastParams.new()
-    params.FilterDescendantsInstances = { player.Character, Workspace.CurrentCamera }
+    params.FilterDescendantsInstances = { CACHE.character, Camera }
     params.FilterType = Enum.RaycastFilterType.Exclude
     local result = Workspace:Raycast(Camera.CFrame.Position, Camera.CFrame.LookVector * 300, params)
     if result and result.Instance then
@@ -1877,6 +1764,9 @@ local function getTarget()
     return nil
 end
 
+-- =========================================================
+-- FPS
+-- =========================================================
 local fps = 0
 local frames = 0
 local t0 = tick()
@@ -1886,95 +1776,101 @@ RunService.RenderStepped:Connect(function()
     if now - t0 >= 1 then fps = frames; frames = 0; t0 = now end
 end)
 
+-- =========================================================
+-- MAIN LOOP (throttled)
+-- =========================================================
 task.spawn(function()
+    local tickCount = 0
     while gui.Parent do
-        if findMod("Render", "Watermark").enabled then
+        tickCount += 1
+
+        if MOD.watermark.enabled then
             local ping = 0
             pcall(function() ping = math.floor(player:GetNetworkPing() * 1000) end)
             wLabel.Text = string.format("Desolate %s | FPS: %d | PING: %d",
                 player.Name, fps, ping)
         end
 
-        if findMod("HUD", "Coordinates").enabled then
-            local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                coordLabel.Text = string.format("X: %.1f Y: %.1f Z: %.1f",
-                    hrp.Position.X, hrp.Position.Y, hrp.Position.Z)
-            end
+        if MOD.coords.enabled and CACHE.hrp then
+            coordLabel.Text = string.format("X: %.1f Y: %.1f Z: %.1f",
+                CACHE.hrp.Position.X, CACHE.hrp.Position.Y, CACHE.hrp.Position.Z)
         end
 
-        if findMod("Render", "NameTags").enabled then
-            for plr, data in pairs(nametags) do
-                if not plr or not plr.Parent then
-                    if data.gui then data.gui:Destroy() end; nametags[plr] = nil
-                elseif plr.Character then
-                    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-                    local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-                    if hum and hrp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                        local dist = (hrp.Position - player.Character.HumanoidRootPart.Position).Magnitude
-                        local sync = isSyncUser(plr)
-                        local prefix = sync and "* " or ""
-                        data.name.Text = prefix .. plr.Name
-                        data.name.TextColor3 = sync and SYNC_COLOR or ACCENT
-                        data.info.Text = string.format("HP: %d/%d | %dm", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(dist))
-                        local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-                        data.hbar.Size = UDim2.new(pct, 0, 1, 0)
-                        data.hbar.BackgroundColor3 = pct > 0.5 and OK
-                            or pct > 0.25 and Color3.fromRGB(255, 220, 100) or ERROR
+        -- NameTags / ESP / TargetHUD — every 2 ticks (0.1s instead of 0.05s)
+        if tickCount % 2 == 0 then
+            if MOD.nameTags.enabled then
+                for plr, data in pairs(nametags) do
+                    if not plr or not plr.Parent then
+                        if data.gui then data.gui:Destroy() end; nametags[plr] = nil
+                    elseif plr.Character and CACHE.hrp then
+                        local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                        local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                        if hum and hrp then
+                            local dist = (hrp.Position - CACHE.hrp.Position).Magnitude
+                            local sync = isSyncUser(plr)
+                            local prefix = sync and "* " or ""
+                            data.name.Text = prefix .. plr.Name
+                            data.name.TextColor3 = sync and SYNC_COLOR or ACCENT
+                            data.info.Text = string.format("HP: %d/%d | %dm", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(dist))
+                            local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                            data.hbar.Size = UDim2.new(pct, 0, 1, 0)
+                            data.hbar.BackgroundColor3 = pct > 0.5 and OK
+                                or pct > 0.25 and Color3.fromRGB(255, 220, 100) or ERROR
+                        end
                     end
                 end
             end
-        end
 
-        if findMod("Render", "ESP").enabled then
-            for plr, hl in pairs(espHighlights) do
-                if not plr or not plr.Character or not plr.Character.Parent then
-                    if hl then hl:Destroy() end; espHighlights[plr] = nil
-                elseif hl and hl.Adornee ~= plr.Character then
-                    hl.Adornee = plr.Character
-                end
-            end
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= player and plr.Character then
-                    local hl = espHighlights[plr]
-                    if not hl then
-                        hl = Instance.new("Highlight")
-                        hl.Name = "DesolateESP"; hl.Adornee = plr.Character
-                        hl.FillTransparency = 0.65; hl.OutlineTransparency = 0
-                        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                        hl.Parent = plr.Character
-                        espHighlights[plr] = hl
-                    end
-                    if isSyncUser(plr) then
-                        hl.FillColor = SYNC_COLOR
-                        hl.OutlineColor = Color3.fromRGB(120, 255, 150)
-                    else
-                        hl.FillColor = Color3.fromRGB(255, 60, 60)
-                        hl.OutlineColor = ACCENT
+            if MOD.esp.enabled then
+                for plr, hl in pairs(espHighlights) do
+                    if not plr or not plr.Character or not plr.Character.Parent then
+                        if hl then hl:Destroy() end; espHighlights[plr] = nil
+                    elseif hl and hl.Adornee ~= plr.Character then
+                        hl.Adornee = plr.Character
                     end
                 end
-            end
-        end
-
-        if findMod("HUD", "TargetHUD").enabled then
-            local plr, hum = getTarget()
-            if plr and hum then
-                local hrp = hum.Parent:FindFirstChild("HumanoidRootPart")
-                local dist = 0
-                if hrp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    dist = (hrp.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= player and plr.Character then
+                        local hl = espHighlights[plr]
+                        if not hl then
+                            hl = Instance.new("Highlight")
+                            hl.Name = "DesolateESP"; hl.Adornee = plr.Character
+                            hl.FillTransparency = 0.65; hl.OutlineTransparency = 0
+                            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                            hl.Parent = plr.Character
+                            espHighlights[plr] = hl
+                        end
+                        if isSyncUser(plr) then
+                            hl.FillColor = SYNC_COLOR
+                            hl.OutlineColor = Color3.fromRGB(120, 255, 150)
+                        else
+                            hl.FillColor = Color3.fromRGB(255, 60, 60)
+                            hl.OutlineColor = ACCENT
+                        end
+                    end
                 end
-                local sync = isSyncUser(plr)
-                thName.Text = (sync and "* " or "") .. plr.Name
-                thName.TextColor3 = sync and SYNC_COLOR or TEXT
-                thInfo.Text = string.format("HP: %d/%d | %dm", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(dist))
-                local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-                thBar.Size = UDim2.new(pct, 0, 1, 0)
-                thBar.BackgroundColor3 = pct > 0.5 and OK
-                    or pct > 0.25 and Color3.fromRGB(255, 220, 100) or ERROR
-            else
-                thName.Text = "No target"; thInfo.Text = "---"
-                thBar.Size = UDim2.new(0, 0, 1, 0)
+            end
+
+            if MOD.targetHUD.enabled then
+                local plr, hum = getTarget()
+                if plr and hum then
+                    local hrp = hum.Parent:FindFirstChild("HumanoidRootPart")
+                    local dist = 0
+                    if hrp and CACHE.hrp then
+                        dist = (hrp.Position - CACHE.hrp.Position).Magnitude
+                    end
+                    local sync = isSyncUser(plr)
+                    thName.Text = (sync and "* " or "") .. plr.Name
+                    thName.TextColor3 = sync and SYNC_COLOR or TEXT
+                    thInfo.Text = string.format("HP: %d/%d | %dm", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(dist))
+                    local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                    thBar.Size = UDim2.new(pct, 0, 1, 0)
+                    thBar.BackgroundColor3 = pct > 0.5 and OK
+                        or pct > 0.25 and Color3.fromRGB(255, 220, 100) or ERROR
+                else
+                    thName.Text = "No target"; thInfo.Text = "---"
+                    thBar.Size = UDim2.new(0, 0, 1, 0)
+                end
             end
         end
 
@@ -1982,7 +1878,10 @@ task.spawn(function()
     end
 end)
 
-findMod("Render", "Fullbright").actions.onToggle = function(on)
+-- =========================================================
+-- FULLBRIGHT
+-- =========================================================
+MOD.fullbright.actions.onToggle = function(on)
     if on then
         Lighting.Ambient = Color3.fromRGB(200, 200, 200)
         Lighting.OutdoorAmbient = Color3.fromRGB(200, 200, 200)
@@ -1994,23 +1893,22 @@ findMod("Render", "Fullbright").actions.onToggle = function(on)
     end
 end
 
-local wsMod = findMod("Player", "WalkSpeed")
-local jpMod = findMod("Player", "JumpPower")
+-- =========================================================
+-- PLAYER
+-- =========================================================
 RunService.Heartbeat:Connect(function()
-    local char = player.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
+    local hum = CACHE.humanoid
     if not hum then return end
-    if wsMod.enabled then hum.WalkSpeed = wsMod.slider.value end
-    if jpMod.enabled then hum.UseJumpPower = true; hum.JumpPower = jpMod.slider.value end
+    if MOD.walkSpeed.enabled then hum.WalkSpeed = MOD.walkSpeed.slider.value end
+    if MOD.jumpPower.enabled then
+        hum.UseJumpPower = true
+        hum.JumpPower = MOD.jumpPower.slider.value
+    end
 end)
 
-local flyMod = findMod("Player", "Fly")
 local flyBV, flyBG
-flyMod.actions.onToggle = function(on)
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
+MOD.fly.actions.onToggle = function(on)
+    local hrp = CACHE.hrp
     if not hrp then return end
     if on then
         flyBV = Instance.new("BodyVelocity")
@@ -2026,8 +1924,8 @@ flyMod.actions.onToggle = function(on)
 end
 
 RunService.Heartbeat:Connect(function()
-    if not flyMod.enabled or not flyBV or not flyBG then return end
-    local speed = flyMod.slider.value
+    if not MOD.fly.enabled or not flyBV or not flyBG then return end
+    local speed = MOD.fly.slider.value
     local move = Vector3.new(0, 0, 0)
     local camCF = Camera.CFrame
     if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += camCF.LookVector end
@@ -2040,12 +1938,10 @@ RunService.Heartbeat:Connect(function()
     flyBV.Velocity = move; flyBG.CFrame = camCF
 end)
 
-findMod("Player", "BunnyHop").actions.onToggle = function(on) end
+MOD.bunnyHop.actions.onToggle = function(on) end
 RunService.Heartbeat:Connect(function()
-    if not findMod("Player", "BunnyHop").enabled then return end
-    local char = player.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not MOD.bunnyHop.enabled then return end
+    local hum = CACHE.humanoid
     if not hum then return end
     local vel = hum.RootPart and hum.RootPart.Velocity or Vector3.new(0, 0, 0)
     if vel.Magnitude > 2 and hum.FloorMaterial ~= Enum.Material.Air then
@@ -2053,25 +1949,26 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-local reachMod = findMod("Player", "Reach")
-reachMod.actions.onChange = function(v)
-    if not reachMod.enabled then return end
+MOD.reach.actions.onChange = function(v)
+    if not MOD.reach.enabled then return end
     pcall(function() player.Reach = v end)
 end
-reachMod.actions.onToggle = function(on)
-    pcall(function() player.Reach = on and reachMod.slider.value or 10 end)
+MOD.reach.actions.onToggle = function(on)
+    pcall(function() player.Reach = on and MOD.reach.slider.value or 10 end)
 end
 
 local originalFOV = Camera.FieldOfView
-local fovMod = findMod("Player", "FOV")
-fovMod.actions.onToggle = function(on)
-    Camera.FieldOfView = on and fovMod.slider.value or originalFOV
+MOD.fov.actions.onToggle = function(on)
+    Camera.FieldOfView = on and MOD.fov.slider.value or originalFOV
 end
-fovMod.actions.onChange = function(v)
-    if not fovMod.enabled then return end
+MOD.fov.actions.onChange = function(v)
+    if not MOD.fov.enabled then return end
     Camera.FieldOfView = v
 end
 
+-- =========================================================
+-- KILL EFFECT
+-- =========================================================
 local killGui = Instance.new("ScreenGui")
 killGui.Name = "DesolateKill"
 killGui.ResetOnSpawn = false; killGui.IgnoreGuiInset = true
@@ -2099,14 +1996,15 @@ local function showKillEffect(victimName)
     task.delay(1.3, function() if lbl and lbl.Parent then lbl:Destroy() end end)
 end
 
-findMod("Player", "Kill Effect").actions.onToggle = function(on) end
+local killEffectMod = findMod("Player", "Kill Effect")
+killEffectMod.actions.onToggle = function(on) end
 Players.PlayerAdded:Connect(function(plr)
     plr.CharacterAdded:Connect(function(char)
         local hum = char:WaitForChild("Humanoid", 5)
         if not hum then return end
         hum.Died:Connect(function()
-            if not findMod("Player", "Kill Effect").enabled then return end
-            local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            if not killEffectMod.enabled then return end
+            local myHrp = CACHE.hrp
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if not myHrp or not hrp then return end
             if (myHrp.Position - hrp.Position).Magnitude < 60 then
@@ -2116,7 +2014,10 @@ Players.PlayerAdded:Connect(function(plr)
     end)
 end)
 
-findMod("Misc", "AntiAFK").actions.onToggle = function(on)
+-- =========================================================
+-- MISC
+-- =========================================================
+MOD.antiAFK.actions.onToggle = function(on)
     if on then
         if not _G.Desolate_AntiAFK then
             _G.Desolate_AntiAFK = player.Idled:Connect(function()
@@ -2131,11 +2032,11 @@ findMod("Misc", "AntiAFK").actions.onToggle = function(on)
     end
 end
 
-findMod("Misc", "Noclip").actions.onToggle = function(on)
+MOD.noclip.actions.onToggle = function(on)
     if on then
         if _G.Desolate_Noclip then _G.Desolate_Noclip:Disconnect() end
         _G.Desolate_Noclip = RunService.Stepped:Connect(function()
-            local char = player.Character
+            local char = CACHE.character
             if not char then return end
             for _, p in ipairs(char:GetDescendants()) do
                 if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
@@ -2143,7 +2044,7 @@ findMod("Misc", "Noclip").actions.onToggle = function(on)
         end)
     else
         if _G.Desolate_Noclip then _G.Desolate_Noclip:Disconnect(); _G.Desolate_Noclip = nil end
-        local char = player.Character
+        local char = CACHE.character
         if char then
             for _, p in ipairs(char:GetDescendants()) do
                 if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
@@ -2154,10 +2055,10 @@ findMod("Misc", "Noclip").actions.onToggle = function(on)
     end
 end
 
-findMod("Misc", "AutoClicker").actions.onToggle = function(on) end
+MOD.autoClicker.actions.onToggle = function(on) end
 RunService.Heartbeat:Connect(function()
-    if not findMod("Misc", "AutoClicker").enabled then return end
-    local cps = findMod("Misc", "AutoClicker").slider.value
+    if not MOD.autoClicker.enabled then return end
+    local cps = MOD.autoClicker.slider.value
     local interval = 1 / math.max(cps, 1)
     if math.random() < math.min(interval, 1) then
         pcall(function()
@@ -2167,13 +2068,13 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-findMod("Misc", "ServerHop").actions.onToggle = function(on)
+MOD.serverHop.actions.onToggle = function(on)
     if not on then return end
     task.spawn(function()
         local placeId = game.PlaceId
         local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
         local ok, body = pcall(function() return game:HttpGet(url) end)
-        if not ok or not body then findMod("Misc", "ServerHop").enabled = false; return end
+        if not ok or not body then MOD.serverHop.enabled = false; return end
         local data = HttpService:JSONDecode(body)
         if data and data.data then
             for _, srv in ipairs(data.data) do
@@ -2185,15 +2086,15 @@ findMod("Misc", "ServerHop").actions.onToggle = function(on)
                 end
             end
         end
-        findMod("Misc", "ServerHop").enabled = false
+        MOD.serverHop.enabled = false
     end)
 end
 
-findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
+MOD.resetHUDPos.actions.onToggle = function(on)
     if not on then return end
     for _, f in ipairs({
-        "desolate_hud_watermark.txt", "desolate_hud_fps.txt",
-        "desolate_hud_coords.txt", "desolate_hud_targethud.txt",
+        "desolate_hud_watermark.txt", "desolate_hud_coords.txt",
+        "desolate_hud_targethud.txt",
     }) do
         pcall(function() if isfile(f) then delfile(f) end end)
     end
@@ -2201,9 +2102,9 @@ findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
     coordFrame.Position = UDim2.new(0, 10, 0, 60)
     targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
     task.spawn(function()
-        task.wait(0.3); findMod("Misc", "Reset HUD Pos").enabled = false; refreshModules()
+        task.wait(0.3); MOD.resetHUDPos.enabled = false; refreshModules()
     end)
-end)
+end
 
 function applyLoadedModules()
     for cat, list in pairs(state) do
@@ -2215,6 +2116,9 @@ function applyLoadedModules()
     end
 end
 
+-- =========================================================
+-- DRAG MAIN + MOBILE + OPEN KEY
+-- =========================================================
 do
     local dragging, dragStart, startPos
     header.InputBegan:Connect(function(input)
@@ -2259,6 +2163,9 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if input.KeyCode == OPEN_KEY then main.Visible = not main.Visible end
 end)
 
+-- =========================================================
+-- INIT
+-- =========================================================
 loadConfig()
 refreshCategories()
 refreshModules()
@@ -2276,10 +2183,10 @@ end
 
 applyLoadedModules()
 
-watermark.Visible = findMod("Render", "Watermark").enabled
-crosshair.Visible = findMod("HUD", "Crosshair").enabled
+watermark.Visible = MOD.watermark.enabled
+crosshair.Visible = MOD.crosshair.enabled
 
 syncPing()
 syncFetch()
 
-print("[Desolate] v" .. VERSION .. " loaded - " .. player.Name)
+print("[Desolate] v" .. VERSION .. " loaded (optimized) - " .. player.Name)
