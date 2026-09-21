@@ -1,10 +1,8 @@
---[[
-    Desolate Client — v4.1.2
-    Xeno | loadstring(game:HttpGet("https://cdn.jsdelivr.net/..."))()
-    Changes: Arrows удалены полностью
-]]
+-- Desolate Client v4.3.0
+-- Xeno loader via request
+-- Changes: Arrows removed, falling Particles, China Hat with Neon+Light, Unload
 
-local VERSION = "4.1.2"
+local VERSION = "4.3.0"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -23,6 +21,27 @@ local TeleportService  = game:GetService("TeleportService")
 local Camera           = Workspace.CurrentCamera
 
 local player = Players.LocalPlayer
+
+-- === Connection tracking ===
+local Connections = {}
+local function track(conn)
+    table.insert(Connections, conn)
+    return conn
+end
+local function untrack()
+    for _, c in ipairs(Connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    Connections = {}
+end
+
+-- === Global registry for created objects ===
+_G.Desolate = _G.Desolate or {}
+_G.Desolate.Instances = _G.Desolate.Instances or {}
+local function registerInstance(inst)
+    table.insert(_G.Desolate.Instances, inst)
+    return inst
+end
 
 local function getHwid()
     if gethwid then
@@ -84,17 +103,17 @@ end
 local function validateKey(key)
     local body = { userid = tostring(player.UserId), hwid = getHwid(), key = key }
     local response = httpPost(AUTH_URL, body)
-    if not response then return false, "Сервер недоступен." end
+    if not response then return false, "Server offline." end
     local ok, data = pcall(function() return HttpService:JSONDecode(response) end)
-    if not ok or type(data) ~= "table" then return false, "Некорректный ответ." end
+    if not ok or type(data) ~= "table" then return false, "Bad response." end
     if not data.valid then
         local reasons = {
-            invalid_key = "Неверный ключ", expired = "Ключ истёк",
-            banned = "Ключ заблокирован",
-            hwid_mismatch = "Ключ привязан к другому устройству",
-            userid_mismatch = "Ключ привязан к другому аккаунту",
+            invalid_key = "Invalid key", expired = "Key expired",
+            banned = "Key banned",
+            hwid_mismatch = "Key bound to another device",
+            userid_mismatch = "Key bound to another account",
         }
-        return false, reasons[data.reason] or ("Отказ: " .. tostring(data.reason))
+        return false, reasons[data.reason] or ("Denied: " .. tostring(data.reason))
     end
     return true, data
 end
@@ -124,7 +143,7 @@ local function showKeyUI(opts)
     title.BackgroundTransparency = 1; title.Position = UDim2.new(0, 14, 0, 12)
     title.Size = UDim2.new(1, -28, 0, 22); title.Font = FONT; title.TextSize = 16
     title.TextColor3 = ACCENT; title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Text = "Desolate · Activation"; title.Parent = box
+    title.Text = "Desolate - Activation"; title.Parent = box
     local inputHolder = Instance.new("Frame")
     inputHolder.Position = UDim2.new(0, 14, 0, 58)
     inputHolder.Size = UDim2.new(1, -28, 0, 40)
@@ -151,12 +170,12 @@ local function showKeyUI(opts)
     Instance.new("UICorner", activate).CornerRadius = UDim.new(0, 8)
     local function tryActivate()
         local key = textBox.Text:gsub("%s+", "")
-        if #key < 6 then status.TextColor3 = ERROR; status.Text = "Ключ слишком короткий"; return end
+        if #key < 6 then status.TextColor3 = ERROR; status.Text = "Key too short"; return end
         activate.Text = "CHECKING..."; activate.Active = false
         task.spawn(function()
             local ok, info = validateKey(key)
             if ok then
-                status.TextColor3 = OK; status.Text = "Активация успешна"
+                status.TextColor3 = OK; status.Text = "Activation success"
                 fs.write(KEY_FILE, key); task.wait(0.5); sg:Destroy()
                 if opts.onSuccess then opts.onSuccess(info) end
             else
@@ -194,48 +213,13 @@ end
 if not requireAuth() then return end
 
 local THEMES = {
-    Dark = {
-        accent = Color3.fromRGB(0, 200, 230),
-        bg = Color3.fromRGB(6, 6, 10), bg2 = Color3.fromRGB(10, 10, 14),
-        bg3 = Color3.fromRGB(14, 14, 20), bg4 = Color3.fromRGB(20, 20, 28),
-        text = Color3.fromRGB(200, 200, 210), muted = Color3.fromRGB(100, 100, 115),
-    },
-    Blood = {
-        accent = Color3.fromRGB(255, 40, 40),
-        bg = Color3.fromRGB(12, 4, 4), bg2 = Color3.fromRGB(20, 8, 8),
-        bg3 = Color3.fromRGB(28, 12, 12), bg4 = Color3.fromRGB(40, 18, 18),
-        text = Color3.fromRGB(230, 200, 200), muted = Color3.fromRGB(140, 100, 100),
-    },
-    Ocean = {
-        accent = Color3.fromRGB(60, 180, 255),
-        bg = Color3.fromRGB(4, 8, 14), bg2 = Color3.fromRGB(8, 14, 22),
-        bg3 = Color3.fromRGB(14, 22, 32), bg4 = Color3.fromRGB(20, 30, 44),
-        text = Color3.fromRGB(200, 220, 240), muted = Color3.fromRGB(100, 120, 140),
-    },
-    Purple = {
-        accent = Color3.fromRGB(180, 80, 255),
-        bg = Color3.fromRGB(10, 4, 16), bg2 = Color3.fromRGB(16, 8, 24),
-        bg3 = Color3.fromRGB(22, 12, 32), bg4 = Color3.fromRGB(32, 18, 44),
-        text = Color3.fromRGB(220, 200, 240), muted = Color3.fromRGB(120, 100, 140),
-    },
-    Pink = {
-        accent = Color3.fromRGB(255, 100, 200),
-        bg = Color3.fromRGB(14, 4, 12), bg2 = Color3.fromRGB(22, 8, 18),
-        bg3 = Color3.fromRGB(30, 12, 24), bg4 = Color3.fromRGB(42, 18, 34),
-        text = Color3.fromRGB(240, 200, 220), muted = Color3.fromRGB(140, 100, 120),
-    },
-    Matrix = {
-        accent = Color3.fromRGB(50, 255, 100),
-        bg = Color3.fromRGB(2, 8, 4), bg2 = Color3.fromRGB(4, 12, 6),
-        bg3 = Color3.fromRGB(6, 18, 10), bg4 = Color3.fromRGB(10, 26, 14),
-        text = Color3.fromRGB(200, 255, 210), muted = Color3.fromRGB(100, 140, 110),
-    },
-    Light = {
-        accent = Color3.fromRGB(0, 150, 200),
-        bg = Color3.fromRGB(230, 230, 235), bg2 = Color3.fromRGB(215, 215, 220),
-        bg3 = Color3.fromRGB(200, 200, 210), bg4 = Color3.fromRGB(180, 180, 195),
-        text = Color3.fromRGB(20, 20, 30), muted = Color3.fromRGB(100, 100, 115),
-    },
+    Dark    = { accent = Color3.fromRGB(0, 200, 230), bg = Color3.fromRGB(6, 6, 10),   bg2 = Color3.fromRGB(10, 10, 14),  bg3 = Color3.fromRGB(14, 14, 20),  bg4 = Color3.fromRGB(20, 20, 28),  text = Color3.fromRGB(200, 200, 210), muted = Color3.fromRGB(100, 100, 115) },
+    Blood   = { accent = Color3.fromRGB(255, 40, 40), bg = Color3.fromRGB(12, 4, 4),    bg2 = Color3.fromRGB(20, 8, 8),    bg3 = Color3.fromRGB(28, 12, 12),  bg4 = Color3.fromRGB(40, 18, 18),  text = Color3.fromRGB(230, 200, 200), muted = Color3.fromRGB(140, 100, 100) },
+    Ocean   = { accent = Color3.fromRGB(60, 180, 255),bg = Color3.fromRGB(4, 8, 14),    bg2 = Color3.fromRGB(8, 14, 22),   bg3 = Color3.fromRGB(14, 22, 32),  bg4 = Color3.fromRGB(20, 30, 44),  text = Color3.fromRGB(200, 220, 240), muted = Color3.fromRGB(100, 120, 140) },
+    Purple  = { accent = Color3.fromRGB(180, 80, 255),bg = Color3.fromRGB(10, 4, 16),   bg2 = Color3.fromRGB(16, 8, 24),   bg3 = Color3.fromRGB(22, 12, 32),  bg4 = Color3.fromRGB(32, 18, 44),  text = Color3.fromRGB(220, 200, 240), muted = Color3.fromRGB(120, 100, 140) },
+    Pink    = { accent = Color3.fromRGB(255, 100, 200),bg = Color3.fromRGB(14, 4, 12),  bg2 = Color3.fromRGB(22, 8, 18),   bg3 = Color3.fromRGB(30, 12, 24),  bg4 = Color3.fromRGB(42, 18, 34),  text = Color3.fromRGB(240, 200, 220), muted = Color3.fromRGB(140, 100, 120) },
+    Matrix  = { accent = Color3.fromRGB(50, 255, 100),bg = Color3.fromRGB(2, 8, 4),     bg2 = Color3.fromRGB(4, 12, 6),    bg3 = Color3.fromRGB(6, 18, 10),   bg4 = Color3.fromRGB(10, 26, 14),  text = Color3.fromRGB(200, 255, 210), muted = Color3.fromRGB(100, 140, 110) },
+    Light   = { accent = Color3.fromRGB(0, 150, 200), bg = Color3.fromRGB(230, 230, 235),bg2 = Color3.fromRGB(215, 215, 220),bg3 = Color3.fromRGB(200, 200, 210),bg4 = Color3.fromRGB(180, 180, 195),text = Color3.fromRGB(20, 20, 30),  muted = Color3.fromRGB(100, 100, 115) },
 }
 
 local ACCENT = THEMES.Dark.accent
@@ -274,11 +258,17 @@ local state = {
         { name = "Effects",          isHeader = true },
         { name = "JumpCircle",   enabled = false, actions = {} },
         { name = "Trails",       enabled = false, actions = {} },
-        { name = "Particles",    enabled = false, actions = {} },
+        { name = "Particles",    enabled = false, actions = {},
+          sliders = {
+            { label = "Rate",  min = 1, max = 50, value = 12 },
+            { label = "Speed", min = 5, max = 50, value = 18 },
+            { label = "Size",  min = 1, max = 10, value = 3 },
+          } },
         { name = "China Hat",    enabled = false, actions = {},
           sliders = {
-            { label = "Glow",     min = 0,   max = 100, value = 60 },
             { label = "Distance", min = 0.5, max = 5,   value = 1.6 },
+            { label = "Neon",     min = 0,   max = 100, value = 100 },
+            { label = "Light",    min = 0,   max = 10,  value = 4 },
           } },
         { name = "Damage Ind",   enabled = false, actions = {} },
     },
@@ -296,6 +286,7 @@ local state = {
           slider = { min = 1, max = 20, value = 8 } },
         { name = "ServerHop",     enabled = false, actions = {} },
         { name = "Reset HUD Pos", enabled = false, actions = {} },
+        { name = "Unload",        enabled = false, actions = {} },
     },
     Player = {
         { name = "Movement",      isHeader = true },
@@ -325,12 +316,11 @@ local function findMod(cat, name)
     return nil
 end
 
--- SYNC
 local syncSet = {}
 local syncMod = findMod("Render", "Show Desolate Users")
 
 local function syncPing()
-    task.spawn(function()
+    track(task.spawn(function()
         while gui and gui.Parent do
             if syncMod.enabled then
                 pcall(function()
@@ -343,11 +333,11 @@ local function syncPing()
             end
             task.wait(25)
         end
-    end)
+    end))
 end
 
 local function syncFetch()
-    task.spawn(function()
+    track(task.spawn(function()
         while gui and gui.Parent do
             if syncMod.enabled then
                 local body = httpPost(AUTH_URL .. "/sync", {
@@ -367,7 +357,7 @@ local function syncFetch()
             end
             task.wait(20)
         end
-    end)
+    end))
 end
 
 local function isSyncUser(plr)
@@ -469,7 +459,7 @@ titleLbl.BackgroundTransparency = 1
 titleLbl.Position = UDim2.new(0, 14, 0, 0); titleLbl.Size = UDim2.new(1, -170, 1, 0)
 titleLbl.Font = FONT; titleLbl.TextSize = 14
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left; titleLbl.TextColor3 = ACCENT
-titleLbl.Text = "Desolate · v" .. VERSION
+titleLbl.Text = "Desolate v" .. VERSION
 titleLbl.Parent = header
 
 local headerBtns = {}
@@ -492,11 +482,11 @@ local function makeHeaderBtn(text, xOff, onClick)
     return b
 end
 
-makeHeaderBtn("💾", -110, function() return saveConfig() end)
-makeHeaderBtn("📂", -80, function()
+makeHeaderBtn("S", -110, function() return saveConfig() end)
+makeHeaderBtn("L", -80, function()
     local ok = loadConfig(); refreshModules(); applyLoadedModules(); return ok
 end)
-makeHeaderBtn("↺", -50, function()
+makeHeaderBtn("R", -50, function()
     resetConfig(); refreshModules(); applyLoadedModules(); return true
 end)
 
@@ -504,7 +494,7 @@ local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 22, 0, 24); closeBtn.Position = UDim2.new(1, -26, 0, 6)
 closeBtn.BackgroundColor3 = BG4
 closeBtn.TextColor3 = TEXT; closeBtn.Font = FONT; closeBtn.TextSize = 14
-closeBtn.Text = "×"; closeBtn.BorderSizePixel = 0; closeBtn.Parent = header
+closeBtn.Text = "X"; closeBtn.BorderSizePixel = 0; closeBtn.Parent = header
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
 closeBtn.MouseButton1Click:Connect(function() main.Visible = false; saveConfig() end)
 
@@ -592,12 +582,12 @@ profHint.Size = UDim2.new(1, -16, 0, 14)
 profHint.Font = FONT; profHint.TextSize = 9
 profHint.TextColor3 = MUTED
 profHint.TextXAlignment = Enum.TextXAlignment.Center
-profHint.Text = "▸ Settings & Themes"
+profHint.Text = "> Settings & Themes"
 profHint.Parent = profileBtn
 
 local function updateProfilePlan()
     if authData.plan == "lifetime" or not authData.expires then
-        profPlan.Text = "Lifetime ✓"; profPlan.TextColor3 = OK
+        profPlan.Text = "Lifetime"; profPlan.TextColor3 = OK
     else
         local left = authData.expires - os.time()
         if left <= 0 then
@@ -605,13 +595,13 @@ local function updateProfilePlan()
         else
             local days = math.floor(left / 86400)
             local hours = math.floor((left % 86400) / 3600)
-            profPlan.Text = string.format("%s · %dd %dh", authData.plan, days, hours)
+            profPlan.Text = string.format("%s %dd %dh", authData.plan, days, hours)
             profPlan.TextColor3 = ACCENT
         end
     end
 end
 updateProfilePlan()
-task.spawn(function() while gui.Parent do updateProfilePlan(); task.wait(60) end end)
+track(task.spawn(function() while gui.Parent do updateProfilePlan(); task.wait(60) end end))
 
 local currentCat = "Render"
 
@@ -713,14 +703,14 @@ local function refreshModules()
                         dragging = true; update(ip)
                     end
                 end)
-                UserInputService.InputChanged:Connect(function(ip)
+                track(UserInputService.InputChanged:Connect(function(ip)
                     if dragging and (ip.UserInputType == Enum.UserInputType.MouseMovement
                        or ip.UserInputType == Enum.UserInputType.Touch) then update(ip) end
-                end)
-                UserInputService.InputEnded:Connect(function(ip)
+                end))
+                track(UserInputService.InputEnded:Connect(function(ip)
                     if ip.UserInputType == Enum.UserInputType.MouseButton1
                        or ip.UserInputType == Enum.UserInputType.Touch then dragging = false end
-                end)
+                end))
             end
 
             if mod.slider then
@@ -793,7 +783,7 @@ subHeaderMask.BackgroundColor3 = BG2; subHeaderMask.BorderSizePixel = 0; subHead
 local backBtn = Instance.new("TextButton")
 backBtn.Size = UDim2.new(0, 30, 0, 24); backBtn.Position = UDim2.new(0, 10, 0, 6)
 backBtn.BackgroundColor3 = BG4; backBtn.TextColor3 = TEXT
-backBtn.Font = FONT; backBtn.TextSize = 14; backBtn.Text = "←"
+backBtn.Font = FONT; backBtn.TextSize = 14; backBtn.Text = "<"
 backBtn.BorderSizePixel = 0; backBtn.Parent = subHeader
 Instance.new("UICorner", backBtn).CornerRadius = UDim.new(0, 6)
 backBtn.MouseButton1Click:Connect(function() subMenu.Visible = false end)
@@ -901,7 +891,7 @@ settingsNote.TextColor3 = MUTED
 settingsNote.TextXAlignment = Enum.TextXAlignment.Left
 settingsNote.TextYAlignment = Enum.TextYAlignment.Top
 settingsNote.TextWrapped = true
-settingsNote.Text = "• RightShift / кнопка D — открыть/закрыть\n• 💾 сохранить · 📂 загрузить · ↺ сброс\n• HUD тягается мышью за любой элемент\n• Автосохранение при закрытии"
+settingsNote.Text = "- RightShift / button D - toggle menu\n- S save, L load, R reset\n- HUD drag with mouse\n- Auto-save on close"
 settingsNote.Parent = subBody
 
 local function applyStaticColors()
@@ -990,15 +980,15 @@ local function makeDraggable(frame, name, defaultX, defaultY)
             dragging = true; dragStart = input.Position; startPos = frame.Position
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
+    track(UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
            or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
                 startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
+    end))
+    track(UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
            or input.UserInputType == Enum.UserInputType.Touch then
             if dragging then
@@ -1010,7 +1000,7 @@ local function makeDraggable(frame, name, defaultX, defaultY)
                 end)
             end
         end
-    end)
+    end))
     local saved = fs.read("desolate_hud_" .. name .. ".txt")
     local loaded = false
     if saved then
@@ -1213,7 +1203,7 @@ findMod("Render", "JumpCircle").actions.onToggle = function(on)
 end
 
 local wasOnGround = true
-RunService.Heartbeat:Connect(function()
+track(RunService.Heartbeat:Connect(function()
     if not findMod("Render", "JumpCircle").enabled then return end
     local char = player.Character
     if not char then return end
@@ -1231,6 +1221,7 @@ RunService.Heartbeat:Connect(function()
         ring.Size = Vector3.new(0.15, 2, 2)
         ring.CFrame = CFrame.new(hrp.Position - Vector3.new(0, 2.9, 0)) * CFrame.Angles(0, 0, math.rad(90))
         ring.Parent = Workspace
+        registerInstance(ring)
         table.insert(jumpRings, { part = ring, born = tick() })
     end
     wasOnGround = onGround
@@ -1246,10 +1237,10 @@ RunService.Heartbeat:Connect(function()
             r.part.Transparency = 0.2 + age / 0.7 * 0.7
         end
     end
-end)
+end))
 
-local trailAccum, particleAccum = 0, 0
-RunService.Heartbeat:Connect(function(dt)
+local trailAccum = 0
+track(RunService.Heartbeat:Connect(function(dt)
     local char = player.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -1278,34 +1269,109 @@ RunService.Heartbeat:Connect(function(dt)
             task.delay(1, function() if att and att.Parent then att:Destroy() end end)
         end
     end
+end))
 
-    if findMod("Render", "Particles").enabled then
-        particleAccum += dt
-        if particleAccum >= 0.1 then
-            particleAccum = 0
-            local p = Instance.new("Part")
-            p.Size = Vector3.new(0.2, 0.2, 0.2)
-            p.Anchored = true; p.CanCollide = false; p.CanQuery = false
-            p.Material = Enum.Material.Neon
-            p.Color = ACCENT; p.Transparency = 0.3
-            local angle = math.random() * math.pi * 2
-            p.CFrame = CFrame.new(
-                hrp.Position + Vector3.new(math.cos(angle) * 2, -1 + math.random() * 0.5, math.sin(angle) * 2))
-            p.Parent = Workspace
-            TweenService:Create(p, TweenInfo.new(1), {
-                Transparency = 1, Size = Vector3.new(0.05, 0.05, 0.05)
-            }):Play()
-            task.delay(1.1, function() if p and p.Parent then p:Destroy() end end)
+-- =========================================================
+-- PARTICLES (falling from sky)
+-- =========================================================
+local particlesMod = findMod("Render", "Particles")
+
+local function buildParticles()
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local existing = hrp:FindFirstChild("DesolateFallingEmitter")
+    if existing then existing:Destroy() end
+
+    if not particlesMod.enabled then return end
+
+    local rate  = particlesMod.sliders[1].value
+    local speed = particlesMod.sliders[2].value
+    local size  = particlesMod.sliders[3].value
+
+    local att = Instance.new("Attachment")
+    att.Name = "DesolateFallingEmitter"
+    att.Position = Vector3.new(0, 25, 0)
+    att.Parent = hrp
+
+    local em = Instance.new("ParticleEmitter")
+    em.Name = "Emitter"
+    em.Texture = "rbxassetid://243098098"
+    em.Color = ColorSequence.new(ACCENT)
+    em.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.2),
+        NumberSequenceKeypoint.new(1, 0.9),
+    })
+    em.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, size / 5),
+        NumberSequenceKeypoint.new(1, size / 20),
+    })
+    em.Lifetime = NumberRange.new(3)
+    em.Speed = NumberRange.new(speed)
+    em.Direction = Vector3.new(0, -1, 0)
+    em.SpreadAngle = Vector2.new(20, 20)
+    em.Acceleration = Vector3.new(0, -25, 0)
+    em.Rotation = NumberRange.new(0, 360)
+    em.RotSpeed = NumberRange.new(-90, 90)
+    em.Rate = rate
+    em.LightEmission = 0.6
+    em.LightInfluence = 0
+    em.Parent = att
+end
+
+particlesMod.actions.onToggle = function(on)
+    if on then buildParticles()
+    else
+        local char = player.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local att = hrp:FindFirstChild("DesolateFallingEmitter")
+                if att then att:Destroy() end
+            end
         end
     end
+end
+
+particlesMod.actions.onSliderChange = function(idx, v)
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local att = hrp:FindFirstChild("DesolateFallingEmitter")
+    if not att then return end
+    local em = att:FindFirstChild("Emitter")
+    if not em then return end
+
+    if idx == 1 then
+        em.Rate = v
+    elseif idx == 2 then
+        em.Speed = NumberRange.new(v)
+    elseif idx == 3 then
+        em.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, v / 5),
+            NumberSequenceKeypoint.new(1, v / 20),
+        })
+    end
+    em.Color = ColorSequence.new(ACCENT)
+end
+
+player.CharacterAdded:Connect(function()
+    task.wait(1)
+    if particlesMod.enabled then buildParticles() end
 end)
 
+-- =========================================================
+-- SKY / FOG / PRESETS
+-- =========================================================
 local SKY_PRESETS = {
-    { name = "Day",        clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
-    { name = "Sunset",     clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
-    { name = "Night",      clockTime = 0,    ambient = Color3.fromRGB(20, 20, 40),    outdoor = Color3.fromRGB(30, 30, 60),    fogColor = Color3.fromRGB(10, 10, 30),    fogEnd = 300 },
-    { name = "Desolate",   clockTime = 22,   ambient = Color3.fromRGB(20, 25, 35),    outdoor = Color3.fromRGB(25, 30, 45),    fogColor = Color3.fromRGB(0, 40, 60),     fogEnd = 250 },
-    { name = "Blood Moon", clockTime = 2,    ambient = Color3.fromRGB(60, 15, 15),    outdoor = Color3.fromRGB(80, 20, 20),    fogColor = Color3.fromRGB(120, 0, 0),     fogEnd = 200 },
+    { clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
+    { clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
+    { clockTime = 0,    ambient = Color3.fromRGB(20, 20, 40),    outdoor = Color3.fromRGB(30, 30, 60),    fogColor = Color3.fromRGB(10, 10, 30),    fogEnd = 300 },
+    { clockTime = 22,   ambient = Color3.fromRGB(20, 25, 35),    outdoor = Color3.fromRGB(25, 30, 45),    fogColor = Color3.fromRGB(0, 40, 60),     fogEnd = 250 },
+    { clockTime = 2,    ambient = Color3.fromRGB(60, 15, 15),    outdoor = Color3.fromRGB(80, 20, 20),    fogColor = Color3.fromRGB(120, 0, 0),     fogEnd = 200 },
 }
 local currentSkyPreset = 4
 local customSkyObj = nil
@@ -1326,6 +1392,7 @@ local function ensureSkyObject()
         customSkyObj.SkyboxRt = "rbxasset://textures/sky/sky512_rt.tex"
         customSkyObj.SkyboxUp = "rbxasset://textures/sky/sky512_up.tex"
         customSkyObj.Parent = Lighting
+        registerInstance(customSkyObj)
     end
     return customSkyObj
 end
@@ -1394,8 +1461,12 @@ presetMod.actions.onChange = function(v)
     Lighting.ClockTime = skyMod.slider.value
 end
 
+-- =========================================================
+-- CHINA HAT (Neon + Light)
+-- =========================================================
 local chinaParts = {}
 local chinaPointLight = nil
+local chinaMod = findMod("Render", "China Hat")
 
 local function destroyChinaHat()
     for _, p in ipairs(chinaParts) do if p and p.Parent then p:Destroy() end end
@@ -1412,6 +1483,11 @@ local function buildChinaHat()
         { y = 0.56, r = 0.37, t = 0.10 }, { y = 0.63, r = 0.22, t = 0.10 },
         { y = 0.70, r = 0.10, t = 0.12 },
     }
+
+    local neonVal  = chinaMod.sliders[2] and chinaMod.sliders[2].value or 100
+    local lightVal = chinaMod.sliders[3] and chinaMod.sliders[3].value or 4
+    local transparency = 1 - (neonVal / 100) * 0.95
+
     for _, layer in ipairs(layers) do
         local p = Instance.new("Part")
         p.Shape = Enum.PartType.Cylinder
@@ -1420,29 +1496,43 @@ local function buildChinaHat()
         p.Size = Vector3.new(layer.t, layer.r * 2, layer.r * 2)
         p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
         p.Anchored = true; p.CastShadow = false; p.Massless = true
+        p.Transparency = transparency
+        p.LightInfluence = 0
         p.Parent = Workspace
+        registerInstance(p)
         table.insert(chinaParts, { part = p, offsetY = layer.y })
     end
+
     chinaPointLight = Instance.new("PointLight")
     chinaPointLight.Color = ACCENT
-    chinaPointLight.Brightness = 1; chinaPointLight.Range = 8
+    chinaPointLight.Brightness = lightVal
+    chinaPointLight.Range = lightVal * 6
     chinaPointLight.Shadows = false
     chinaPointLight.Parent = chinaParts[#chinaParts].part
 end
 
-local chinaMod = findMod("Render", "China Hat")
 chinaMod.actions.onToggle = function(on)
     if on then buildChinaHat() else destroyChinaHat() end
 end
 chinaMod.actions.onSliderChange = function(idx, v)
-    if idx == 1 and chinaPointLight then
-        local t = v / 100
-        chinaPointLight.Brightness = t * 4
-        chinaPointLight.Range = t * 24
+    if idx == 2 then
+        local transparency = 1 - (v / 100) * 0.95
+        for _, entry in ipairs(chinaParts) do
+            entry.part.Transparency = transparency
+            entry.part.Color = ACCENT
+        end
+        if chinaPointLight then
+            chinaPointLight.Brightness = (v / 100) * 8
+            chinaPointLight.Color = ACCENT
+        end
+    elseif idx == 3 then
+        if chinaPointLight then
+            chinaPointLight.Range = v * 6
+        end
     end
 end
 
-RunService.Heartbeat:Connect(function()
+track(RunService.Heartbeat:Connect(function()
     if not chinaMod.enabled then return end
     local char = player.Character
     if not char then return end
@@ -1451,16 +1541,19 @@ RunService.Heartbeat:Connect(function()
     if not chinaParts[1] or not chinaParts[1].part.Parent then
         buildChinaHat(); return
     end
-    local dist = chinaMod.sliders[2] and chinaMod.sliders[2].value or 1.6
+    local dist = chinaMod.sliders[1] and chinaMod.sliders[1].value or 1.6
+    local neonVal = chinaMod.sliders[2] and chinaMod.sliders[2].value or 100
+    local transparency = 1 - (neonVal / 100) * 0.95
     local t = tick()
     local baseCF = head.CFrame * CFrame.new(0, dist + math.sin(t * 2) * 0.06, 0)
         * CFrame.Angles(0, t * 0.8, math.rad(90))
     for _, entry in ipairs(chinaParts) do
         entry.part.CFrame = baseCF * CFrame.new(entry.offsetY, 0, 0)
         entry.part.Color = ACCENT
+        entry.part.Transparency = transparency
     end
     if chinaPointLight then chinaPointLight.Color = ACCENT end
-end)
+end))
 
 local timeMod = findMod("Render", "Time Changer")
 timeMod.actions.onToggle = function(on)
@@ -1516,6 +1609,7 @@ findMod("Render", "Damage Ind").actions.onToggle = function(on)
             end
             lastHealth = hum.Health
         end)
+        track(healthConn)
     else
         if healthConn then healthConn:Disconnect(); healthConn = nil end
         lastHealth = nil
@@ -1580,18 +1674,18 @@ end
 local fps = 0
 local frames = 0
 local t0 = tick()
-RunService.RenderStepped:Connect(function()
+track(RunService.RenderStepped:Connect(function()
     frames += 1
     local now = tick()
     if now - t0 >= 1 then fps = frames; frames = 0; t0 = now end
-end)
+end))
 
-task.spawn(function()
+track(task.spawn(function()
     while gui.Parent do
         if findMod("Render", "Watermark").enabled then
             local ping = 0
             pcall(function() ping = math.floor(player:GetNetworkPing() * 1000) end)
-            wLabel.Text = string.format("Desolate · %s · FPS: %d | PING: %d",
+            wLabel.Text = string.format("Desolate %s | FPS: %d | PING: %d",
                 player.Name, fps, ping)
         end
 
@@ -1613,7 +1707,7 @@ task.spawn(function()
                     if hum and hrp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                         local dist = (hrp.Position - player.Character.HumanoidRootPart.Position).Magnitude
                         local sync = isSyncUser(plr)
-                        local prefix = sync and "◆ " or ""
+                        local prefix = sync and "* " or ""
                         data.name.Text = prefix .. plr.Name
                         data.name.TextColor3 = sync and SYNC_COLOR or ACCENT
                         data.info.Text = string.format("HP: %d/%d | %dm", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(dist))
@@ -1665,7 +1759,7 @@ task.spawn(function()
                     dist = (hrp.Position - player.Character.HumanoidRootPart.Position).Magnitude
                 end
                 local sync = isSyncUser(plr)
-                thName.Text = (sync and "◆ " or "") .. plr.Name
+                thName.Text = (sync and "* " or "") .. plr.Name
                 thName.TextColor3 = sync and SYNC_COLOR or TEXT
                 thInfo.Text = string.format("HP: %d/%d | %dm", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(dist))
                 local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
@@ -1680,7 +1774,7 @@ task.spawn(function()
 
         task.wait(0.05)
     end
-end)
+end))
 
 findMod("Render", "Fullbright").actions.onToggle = function(on)
     if on then
@@ -1696,14 +1790,14 @@ end
 
 local wsMod = findMod("Player", "WalkSpeed")
 local jpMod = findMod("Player", "JumpPower")
-RunService.Heartbeat:Connect(function()
+track(RunService.Heartbeat:Connect(function()
     local char = player.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
     if wsMod.enabled then hum.WalkSpeed = wsMod.slider.value end
     if jpMod.enabled then hum.UseJumpPower = true; hum.JumpPower = jpMod.slider.value end
-end)
+end))
 
 local flyMod = findMod("Player", "Fly")
 local flyBV, flyBG
@@ -1725,7 +1819,7 @@ flyMod.actions.onToggle = function(on)
     end
 end
 
-RunService.Heartbeat:Connect(function()
+track(RunService.Heartbeat:Connect(function()
     if not flyMod.enabled or not flyBV or not flyBG then return end
     local speed = flyMod.slider.value
     local move = Vector3.new(0, 0, 0)
@@ -1738,10 +1832,10 @@ RunService.Heartbeat:Connect(function()
     if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move -= Vector3.new(0, 1, 0) end
     if move.Magnitude > 0 then move = move.Unit * speed end
     flyBV.Velocity = move; flyBG.CFrame = camCF
-end)
+end))
 
 findMod("Player", "BunnyHop").actions.onToggle = function(on) end
-RunService.Heartbeat:Connect(function()
+track(RunService.Heartbeat:Connect(function()
     if not findMod("Player", "BunnyHop").enabled then return end
     local char = player.Character
     if not char then return end
@@ -1751,7 +1845,7 @@ RunService.Heartbeat:Connect(function()
     if vel.Magnitude > 2 and hum.FloorMaterial ~= Enum.Material.Air then
         hum.Jump = true
     end
-end)
+end))
 
 local reachMod = findMod("Player", "Reach")
 reachMod.actions.onChange = function(v)
@@ -1855,7 +1949,7 @@ findMod("Misc", "Noclip").actions.onToggle = function(on)
 end
 
 findMod("Misc", "AutoClicker").actions.onToggle = function(on) end
-RunService.Heartbeat:Connect(function()
+track(RunService.Heartbeat:Connect(function()
     if not findMod("Misc", "AutoClicker").enabled then return end
     local cps = findMod("Misc", "AutoClicker").slider.value
     local interval = 1 / math.max(cps, 1)
@@ -1865,7 +1959,7 @@ RunService.Heartbeat:Connect(function()
             VirtualUser:ClickButton1(Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2))
         end)
     end
-end)
+end))
 
 findMod("Misc", "ServerHop").actions.onToggle = function(on)
     if not on then return end
@@ -1905,10 +1999,75 @@ findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
     end)
 end
 
+-- =========================================================
+-- UNLOAD
+-- =========================================================
+local function unloadScript()
+    print("[Desolate] Unloading...")
+    -- 1. Сохраняем конфиг
+    pcall(saveConfig)
+    -- 2. Отключаем все соединения
+    untrack()
+    if _G.Desolate_AntiAFK then pcall(function() _G.Desolate_AntiAFK:Disconnect() end); _G.Desolate_AntiAFK = nil end
+    if _G.Desolate_Noclip then pcall(function() _G.Desolate_Noclip:Disconnect() end); _G.Desolate_Noclip = nil end
+    -- 3. Удаляем все созданные инстансы
+    for _, inst in ipairs(_G.Desolate.Instances or {}) do
+        pcall(function() if inst and inst.Parent then inst:Destroy() end end)
+    end
+    _G.Desolate.Instances = {}
+    -- 4. Удаляем шапку / партиклы
+    pcall(function()
+        for _, entry in ipairs(chinaParts) do
+            if entry.part and entry.part.Parent then entry.part:Destroy() end
+        end
+        chinaParts = {}
+    end)
+    -- 5. Удаляем GUI
+    pcall(function() if gui and gui.Parent then gui:Destroy() end end)
+    pcall(function() if subGui and subGui.Parent then subGui:Destroy() end end)
+    pcall(function() if hudGui and hudGui.Parent then hudGui:Destroy() end end)
+    pcall(function() if damageIndGui and damageIndGui.Parent then damageIndGui:Destroy() end end)
+    pcall(function() if killGui and killGui.Parent then killGui:Destroy() end end)
+    -- 6. Восстанавливаем Lighting
+    pcall(function()
+        Lighting.Ambient = originalLighting.Ambient
+        Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+        Lighting.FogColor = originalLighting.FogColor
+        Lighting.FogStart = originalLighting.FogStart
+        Lighting.FogEnd = originalLighting.FogEnd
+        Lighting.ClockTime = originalLighting.ClockTime
+        Lighting.Brightness = originalLighting.Brightness
+    end)
+    pcall(function() if customSkyObj then customSkyObj:Destroy() end end)
+    -- 7. Удаляем nametags
+    pcall(function()
+        for _, d in pairs(nametags) do
+            if d.gui then d.gui:Destroy() end
+        end
+        nametags = {}
+    end)
+    -- 8. Убираем Highlight
+    pcall(function()
+        for _, hl in pairs(espHighlights) do
+            if hl then hl:Destroy() end
+        end
+        espHighlights = {}
+    end)
+    -- 9. Очищаем global
+    _G.Desolate = nil
+    print("[Desolate] Unloaded.")
+end
+
+findMod("Misc", "Unload").actions.onToggle = function(on)
+    if on then
+        task.spawn(unloadScript)
+    end
+end
+
 function applyLoadedModules()
     for cat, list in pairs(state) do
         for _, mod in ipairs(list) do
-            if not mod.isHeader and mod.actions.onToggle then
+            if not mod.isHeader and mod.name ~= "Unload" and mod.actions.onToggle then
                 pcall(mod.actions.onToggle, mod.enabled)
             end
         end
@@ -1923,7 +2082,7 @@ do
             dragging = true; dragStart = input.Position; startPos = main.Position
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
+    track(UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
            or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
@@ -1931,11 +2090,11 @@ do
                 startPos.Y.Scale, startPos.Y.Offset + delta.Y)
             if subMenu.Visible then subMenu.Position = main.Position end
         end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
+    end))
+    track(UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
            or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
-    end)
+    end))
 end
 
 local mobileBtn = Instance.new("TextButton")
@@ -1954,10 +2113,10 @@ main:GetPropertyChangedSignal("Visible"):Connect(function()
     mobileBtn.Visible = not main.Visible
 end)
 
-UserInputService.InputBegan:Connect(function(input, gpe)
+track(UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == OPEN_KEY then main.Visible = not main.Visible end
-end)
+end))
 
 loadConfig()
 refreshCategories()
@@ -1982,4 +2141,4 @@ crosshair.Visible = findMod("HUD", "Crosshair").enabled
 syncPing()
 syncFetch()
 
-print("[Desolate] v" .. VERSION .. " loaded · " .. player.Name)
+print("[Desolate] v" .. VERSION .. " loaded - " .. player.Name)
