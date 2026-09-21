@@ -1,9 +1,10 @@
 --[[
-    Desolate Client — v4.1.0
-    Xeno v1.3.60+ | loadstring(game:HttpGet("URL"))()
+    Desolate Client — v4.1.1
+    Xeno v1.3.60+ | loadstring(request({...}).Body)()
+    Changes: убраны кольца ArrowRadar
 ]]
 
-local VERSION = "4.1.0"
+local VERSION = "4.1.1"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -300,7 +301,7 @@ local state = {
         { name = "Overlay",       isHeader = true },
         { name = "Coordinates", enabled = false, actions = {} },
         { name = "TargetHUD",   enabled = false, actions = {} },
-        { name = "Crosshair",   enabled = true,  actions = {} },
+        { name = "Crosshair",   enabled = false, actions = {} },
     },
     Misc = {
         { name = "Utility",       isHeader = true },
@@ -974,10 +975,6 @@ local function applyStaticColors()
     for _, b in ipairs(headerBtns) do
         b.BackgroundColor3 = BG4; b.TextColor3 = TEXT
     end
-    if arrowRadarRing then
-        arrowRadarRing.ImageColor3 = ACCENT
-        arrowRadarRing2.ImageColor3 = ACCENT
-    end
     for _, a in ipairs(arrowPool) do a.TextColor3 = ACCENT end
 end
 
@@ -1111,7 +1108,7 @@ crosshair.AnchorPoint = Vector2.new(0.5, 0.5)
 crosshair.Position = UDim2.new(0.5, 0, 0.5, 0)
 crosshair.Size = UDim2.new(0, 20, 0, 20)
 crosshair.BackgroundTransparency = 1
-crosshair.Visible = true; crosshair.Parent = hudGui
+crosshair.Visible = false; crosshair.Parent = hudGui
 
 local chMode = "circle"
 function buildCrosshair()
@@ -1145,7 +1142,9 @@ end
 buildCrosshair()
 findMod("HUD", "Crosshair").actions.onToggle = function(on) crosshair.Visible = on end
 
--- ARROWS
+-- =========================================================
+-- ARROWS (без колец)
+-- =========================================================
 local arrowRadar = Instance.new("Frame")
 arrowRadar.Name = "ArrowRadar"
 arrowRadar.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1153,28 +1152,6 @@ arrowRadar.Position = UDim2.new(0.5, 0, 0.5, 0)
 arrowRadar.Size = UDim2.new(0, 1, 0, 1)
 arrowRadar.BackgroundTransparency = 1
 arrowRadar.Visible = false; arrowRadar.Parent = hudGui
-
-local arrowRadarRing = Instance.new("ImageLabel")
-arrowRadarRing.Name = "Ring"
-arrowRadarRing.AnchorPoint = Vector2.new(0.5, 0.5)
-arrowRadarRing.Position = UDim2.new(0.5, 0, 0.5, 0)
-arrowRadarRing.BackgroundTransparency = 1
-arrowRadarRing.Image = "rbxassetid://3570695787"
-arrowRadarRing.ImageColor3 = ACCENT
-arrowRadarRing.ImageTransparency = 0.7
-arrowRadarRing.Size = UDim2.new(0, 200, 0, 200)
-arrowRadarRing.Parent = arrowRadar
-
-local arrowRadarRing2 = Instance.new("ImageLabel")
-arrowRadarRing2.Name = "Ring2"
-arrowRadarRing2.AnchorPoint = Vector2.new(0.5, 0.5)
-arrowRadarRing2.Position = UDim2.new(0.5, 0, 0.5, 0)
-arrowRadarRing2.BackgroundTransparency = 1
-arrowRadarRing2.Image = "rbxassetid://3570695787"
-arrowRadarRing2.ImageColor3 = ACCENT
-arrowRadarRing2.ImageTransparency = 0.9
-arrowRadarRing2.Size = UDim2.new(0, 100, 0, 100)
-arrowRadarRing2.Parent = arrowRadar
 
 local arrowPool = {}
 local function getArrow()
@@ -1193,10 +1170,7 @@ end
 local arrowMod = findMod("Render", "Arrows")
 arrowMod.actions.onToggle = function(on) arrowRadar.Visible = on end
 arrowMod.actions.onSliderChange = function(idx, v)
-    if idx == 1 then
-        arrowRadarRing.Size = UDim2.new(0, v * 2, 0, v * 2)
-        arrowRadarRing2.Size = UDim2.new(0, v, 0, v)
-    elseif idx == 2 then
+    if idx == 2 then
         for _, a in ipairs(arrowPool) do
             a.Size = UDim2.new(0, v, 0, v)
             a.TextSize = v * 0.8
@@ -1204,7 +1178,9 @@ arrowMod.actions.onSliderChange = function(idx, v)
     end
 end
 
+-- =========================================================
 -- NAMETAGS
+-- =========================================================
 local nametagFolder = Instance.new("Folder")
 nametagFolder.Name = "DesolateNameTags"; nametagFolder.Parent = hudGui
 local nametags = {}
@@ -2056,7 +2032,7 @@ findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
     task.spawn(function()
         task.wait(0.3); findMod("Misc", "Reset HUD Pos").enabled = false; refreshModules()
     end)
-end
+end)
 
 -- Apply
 function applyLoadedModules()
