@@ -1,7 +1,8 @@
--- Desolate Client v4.2.1
+-- Desolate Client v4.4.0
 -- Xeno loader via request
+-- New: FOV Circle, Hit Marker, Radar, Kill Counter
 
-local VERSION = "4.2.1"
+local VERSION = "4.4.0"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -255,6 +256,14 @@ local state = {
         { name = "Coordinates", enabled = false, actions = {} },
         { name = "TargetHUD",   enabled = false, actions = {} },
         { name = "Crosshair",   enabled = false, actions = {} },
+
+        { name = "Aim Visuals",      isHeader = true },
+        { name = "FOV Circle",  enabled = false, actions = {},
+          slider = { min = 30, max = 400, value = 120 } },
+        { name = "Hit Marker",  enabled = false, actions = {} },
+        { name = "Radar",       enabled = false, actions = {},
+          slider = { min = 30, max = 500, value = 150 } },
+        { name = "Kill Counter", enabled = false, actions = {} },
     },
     Misc = {
         { name = "Utility",       isHeader = true },
@@ -843,9 +852,7 @@ local function rebuildThemeGrid()
         sub.Text = (currentTheme == tName) and "Active" or "click to apply"
         sub.Parent = btn
 
-        btn.MouseButton1Click:Connect(function()
-            applyTheme(tName)
-        end)
+        btn.MouseButton1Click:Connect(function() applyTheme(tName) end)
     end
 end
 
@@ -1072,6 +1079,309 @@ end
 buildCrosshair()
 findMod("HUD", "Crosshair").actions.onToggle = function(on) crosshair.Visible = on end
 
+-- =========================================================
+-- FOV CIRCLE
+-- =========================================================
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FOVCircle"
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+fovCircle.Size = UDim2.new(0, 240, 0, 240)
+fovCircle.BackgroundTransparency = 1
+fovCircle.Visible = false; fovCircle.Parent = hudGui
+
+local fovCircleInner = Instance.new("Frame")
+fovCircleInner.Size = UDim2.new(1, 0, 1, 0)
+fovCircleInner.BackgroundTransparency = 1
+fovCircleInner.Parent = fovCircle
+Instance.new("UICorner", fovCircleInner).CornerRadius = UDim.new(0, 999)
+
+local fovCircleStroke = Instance.new("UIStroke")
+fovCircleStroke.Color = ACCENT
+fovCircleStroke.Thickness = 1.5
+fovCircleStroke.Transparency = 0.3
+fovCircleStroke.Parent = fovCircleInner
+
+local fovMod2 = findMod("HUD", "FOV Circle")
+fovMod2.actions.onToggle = function(on) fovCircle.Visible = on end
+fovMod2.actions.onChange = function(v)
+    fovCircle.Size = UDim2.new(0, v, 0, v)
+end
+
+-- =========================================================
+-- HIT MARKER
+-- =========================================================
+local hitMarkerFrame = Instance.new("Frame")
+hitMarkerFrame.Name = "HitMarker"
+hitMarkerFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+hitMarkerFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+hitMarkerFrame.Size = UDim2.new(0, 30, 0, 30)
+hitMarkerFrame.BackgroundTransparency = 1
+hitMarkerFrame.Visible = false; hitMarkerFrame.Parent = hudGui
+
+local hmBars = {}
+for i = 1, 4 do
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(0, 10, 0, 2)
+    bar.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+    bar.BorderSizePixel = 0
+    bar.AnchorPoint = Vector2.new(0.5, 0.5)
+    bar.Parent = hitMarkerFrame
+    table.insert(hmBars, bar)
+end
+hmBars[1].Position = UDim2.new(0.5, -6, 0.5, -6)
+hmBars[1].Rotation = 45
+hmBars[2].Position = UDim2.new(0.5, 6, 0.5, -6)
+hmBars[2].Rotation = -45
+hmBars[3].Position = UDim2.new(0.5, -6, 0.5, 6)
+hmBars[3].Rotation = -45
+hmBars[4].Position = UDim2.new(0.5, 6, 0.5, 6)
+hmBars[4].Rotation = 45
+
+local hitMarkerConn = nil
+local lastTargetHP = nil
+local lastTargetName = nil
+local hitMarkerMod = findMod("HUD", "Hit Marker")
+
+local function showHitMarker()
+    hitMarkerFrame.Visible = true
+    for _, bar in ipairs(hmBars) do
+        bar.BackgroundTransparency = 0
+    end
+    TweenService:Create(hitMarkerFrame, TweenInfo.new(0.4), {}):Play()
+    task.delay(0.15, function()
+        for _, bar in ipairs(hmBars) do
+            TweenService:Create(bar, TweenInfo.new(0.25), { BackgroundTransparency = 1 }):Play()
+        end
+    end)
+    task.delay(0.5, function()
+        hitMarkerFrame.Visible = false
+    end)
+end
+
+hitMarkerMod.actions.onToggle = function(on)
+    if on then
+        if hitMarkerConn then hitMarkerConn:Disconnect() end
+        hitMarkerConn = RunService.Heartbeat:Connect(function()
+            local params = RaycastParams.new()
+            params.FilterDescendantsInstances = { player.Character, Workspace.CurrentCamera }
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            local result = Workspace:Raycast(Camera.CFrame.Position, Camera.CFrame.LookVector * 500, params)
+            if result and result.Instance then
+                local model = result.Instance:FindFirstAncestorOfClass("Model")
+                if model then
+                    local hum = model:FindFirstChildOfClass("Humanoid")
+                    local plr = Players:GetPlayerFromCharacter(model)
+                    if hum and plr and plr ~= player then
+                        if lastTargetName == plr.Name and lastTargetHP and hum.Health < lastTargetHP then
+                            showHitMarker()
+                        end
+                        lastTargetName = plr.Name
+                        lastTargetHP = hum.Health
+                    else
+                        lastTargetName = nil; lastTargetHP = nil
+                    end
+                end
+            else
+                lastTargetName = nil; lastTargetHP = nil
+            end
+        end)
+    else
+        if hitMarkerConn then hitMarkerConn:Disconnect(); hitMarkerConn = nil end
+        lastTargetName = nil; lastTargetHP = nil
+        hitMarkerFrame.Visible = false
+    end
+end
+
+-- =========================================================
+-- RADAR
+-- =========================================================
+local radarFrame = Instance.new("Frame")
+radarFrame.Name = "Radar"
+radarFrame.Size = UDim2.new(0, 160, 0, 160)
+radarFrame.Position = UDim2.new(0, 10, 1, -180)
+radarFrame.BackgroundColor3 = BG2
+radarFrame.BackgroundTransparency = 0.2
+radarFrame.BorderSizePixel = 0
+radarFrame.Visible = false
+radarFrame.ClipsDescendants = true
+radarFrame.Parent = hudGui
+Instance.new("UICorner", radarFrame).CornerRadius = UDim.new(0, 999)
+
+local radarStroke = Instance.new("UIStroke")
+radarStroke.Color = ACCENT; radarStroke.Thickness = 1.5; radarStroke.Transparency = 0.4
+radarStroke.Parent = radarFrame
+
+-- центр (я)
+local radarSelf = Instance.new("Frame")
+radarSelf.Size = UDim2.new(0, 8, 0, 8)
+radarSelf.AnchorPoint = Vector2.new(0.5, 0.5)
+radarSelf.Position = UDim2.new(0.5, 0, 0.5, 0)
+radarSelf.BackgroundColor3 = ACCENT
+radarSelf.BorderSizePixel = 0
+radarSelf.ZIndex = 5
+radarSelf.Parent = radarFrame
+Instance.new("UICorner", radarSelf).CornerRadius = UDim.new(0, 999)
+
+-- север
+local radarNorth = Instance.new("TextLabel")
+radarNorth.BackgroundTransparency = 1
+radarNorth.Position = UDim2.new(0.5, -6, 0, 2)
+radarNorth.Size = UDim2.new(0, 12, 0, 12)
+radarNorth.Font = FONT; radarNorth.TextSize = 10
+radarNorth.TextColor3 = ACCENT
+radarNorth.Text = "N"
+radarNorth.ZIndex = 6
+radarNorth.Parent = radarFrame
+
+local radarDots = {}
+local radarMod = findMod("HUD", "Radar")
+
+local function getRadarDot()
+    for _, d in ipairs(radarDots) do
+        if not d.visible then return d end
+    end
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 6, 0, 6)
+    dot.AnchorPoint = Vector2.new(0.5, 0.5)
+    dot.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+    dot.BorderSizePixel = 0
+    dot.ZIndex = 4
+    dot.Parent = radarFrame
+    Instance.new("UICorner", dot).CornerRadius = UDim.new(0, 999)
+    local entry = { frame = dot, visible = true }
+    table.insert(radarDots, entry)
+    return entry
+end
+
+radarMod.actions.onToggle = function(on) radarFrame.Visible = on end
+radarMod.actions.onChange = function(v)
+    radarFrame.Size = UDim2.new(0, 160, 0, 160)
+end
+
+makeDraggable(radarFrame, "radar", 10, 220)
+
+-- =========================================================
+-- KILL COUNTER
+-- =========================================================
+local killCounterFrame = Instance.new("Frame")
+killCounterFrame.Name = "KillCounter"
+killCounterFrame.Size = UDim2.new(0, 160, 0, 50)
+killCounterFrame.Position = UDim2.new(0, 400, 0, 10)
+killCounterFrame.BackgroundColor3 = BG2
+killCounterFrame.BackgroundTransparency = 0.15
+killCounterFrame.BorderSizePixel = 0
+killCounterFrame.Visible = false
+killCounterFrame.Parent = hudGui
+Instance.new("UICorner", killCounterFrame).CornerRadius = UDim.new(0, 8)
+
+local kcAccent = Instance.new("Frame")
+kcAccent.Size = UDim2.new(0, 3, 1, 0); kcAccent.BackgroundColor3 = ACCENT
+kcAccent.BorderSizePixel = 0; kcAccent.Parent = killCounterFrame
+Instance.new("UICorner", kcAccent).CornerRadius = UDim.new(0, 8)
+
+local kcLabel = Instance.new("TextLabel")
+kcLabel.BackgroundTransparency = 1
+kcLabel.Position = UDim2.new(0, 10, 0, 4)
+kcLabel.Size = UDim2.new(1, -14, 0, 18)
+kcLabel.Font = FONT; kcLabel.TextSize = 12
+kcLabel.TextXAlignment = Enum.TextXAlignment.Left
+kcLabel.TextColor3 = TEXT
+kcLabel.Text = "K: 0 | D: 0 | K/D: 0.00"
+kcLabel.Parent = killCounterFrame
+
+local kcSubLabel = Instance.new("TextLabel")
+kcSubLabel.BackgroundTransparency = 1
+kcSubLabel.Position = UDim2.new(0, 10, 0, 24)
+kcSubLabel.Size = UDim2.new(1, -14, 0, 14)
+kcSubLabel.Font = FONT; kcSubLabel.TextSize = 10
+kcSubLabel.TextXAlignment = Enum.TextXAlignment.Left
+kcSubLabel.TextColor3 = MUTED
+kcSubLabel.Text = "session"
+kcSubLabel.Parent = killCounterFrame
+
+local killCount = 0
+local deathCount = 0
+local killCounterMod = findMod("HUD", "Kill Counter")
+
+local function updateKillCounter()
+    local kd = 0
+    if deathCount > 0 then kd = killCount / deathCount else kd = killCount end
+    kcLabel.Text = string.format("K: %d | D: %d | K/D: %.2f", killCount, deathCount, kd)
+end
+
+killCounterMod.actions.onToggle = function(on) killCounterFrame.Visible = on end
+
+-- Reset kill/death on respawn
+task.spawn(function()
+    local lastHealth = nil
+    RunService.Heartbeat:Connect(function()
+        local char = player.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        if lastHealth == nil then lastHealth = hum.Health; return end
+        if hum.Health <= 0 and lastHealth > 0 then
+            deathCount += 1
+            updateKillCounter()
+        end
+        lastHealth = hum.Health
+    end)
+end)
+
+-- Kill detection — nearby player dies
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function(char)
+        local hum = char:WaitForChild("Humanoid", 5)
+        if not hum then return end
+        local lastHp = hum.Health
+        hum.HealthChanged:Connect(function(hp)
+            if hp <= 0 and lastHp > 0 and killCounterMod.enabled then
+                local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if myHrp and hrp then
+                    local dist = (myHrp.Position - hrp.Position).Magnitude
+                    -- Must be nearby (<80 studs) to count as kill
+                    if dist < 80 then
+                        killCount += 1
+                        updateKillCounter()
+                    end
+                end
+            end
+            lastHp = hp
+        end)
+    end)
+end)
+
+-- Also for already-existing players
+for _, plr in ipairs(Players:GetPlayers()) do
+    if plr ~= player and plr.Character then
+        local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            local lastHp = hum.Health
+            hum.HealthChanged:Connect(function(hp)
+                if hp <= 0 and lastHp > 0 and killCounterMod.enabled then
+                    local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                    local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                    if myHrp and hrp then
+                        if (myHrp.Position - hrp.Position).Magnitude < 80 then
+                            killCount += 1
+                            updateKillCounter()
+                        end
+                    end
+                end
+                lastHp = hp
+            end)
+        end
+    end
+end
+
+updateKillCounter()
+makeDraggable(killCounterFrame, "killcounter", 400, 10)
+
+-- =========================================================
+-- NAMETAGS
+-- =========================================================
 local nametagFolder = Instance.new("Folder")
 nametagFolder.Name = "DesolateNameTags"; nametagFolder.Parent = hudGui
 local nametags = {}
@@ -1151,6 +1461,9 @@ Players.PlayerRemoving:Connect(function(plr)
     end
 end)
 
+-- =========================================================
+-- ESP
+-- =========================================================
 local espHighlights = {}
 findMod("Render", "ESP").actions.onToggle = function(on)
     if on then
@@ -1171,6 +1484,9 @@ findMod("Render", "ESP").actions.onToggle = function(on)
     end
 end
 
+-- =========================================================
+-- JUMP CIRCLE
+-- =========================================================
 local jumpRings = {}
 findMod("Render", "JumpCircle").actions.onToggle = function(on)
     if not on then
@@ -1215,6 +1531,9 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- =========================================================
+-- TRAILS / PARTICLES
+-- =========================================================
 local trailAccum = 0
 RunService.Heartbeat:Connect(function(dt)
     local char = player.Character
@@ -1336,6 +1655,9 @@ player.CharacterAdded:Connect(function()
     if particlesMod.enabled then buildParticles() end
 end)
 
+-- =========================================================
+-- SKY / FOG / PRESETS
+-- =========================================================
 local SKY_PRESETS = {
     { clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
     { clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
@@ -1430,6 +1752,9 @@ presetMod.actions.onChange = function(v)
     Lighting.ClockTime = skyMod.slider.value
 end
 
+-- =========================================================
+-- CHINA HAT
+-- =========================================================
 local chinaParts = {}
 local chinaPointLight = nil
 local chinaMod = findMod("Render", "China Hat")
@@ -1491,9 +1816,7 @@ chinaMod.actions.onSliderChange = function(idx, v)
             chinaPointLight.Color = ACCENT
         end
     elseif idx == 3 then
-        if chinaPointLight then
-            chinaPointLight.Range = v * 6
-        end
+        if chinaPointLight then chinaPointLight.Range = v * 6 end
     end
 end
 
@@ -1530,6 +1853,9 @@ timeMod.actions.onChange = function(v)
     Lighting.ClockTime = v
 end
 
+-- =========================================================
+-- DAMAGE INDICATOR
+-- =========================================================
 local damageIndGui = Instance.new("ScreenGui")
 damageIndGui.Name = "DesolateDmg"
 damageIndGui.ResetOnSpawn = false; damageIndGui.IgnoreGuiInset = true
@@ -1580,6 +1906,9 @@ findMod("Render", "Damage Ind").actions.onToggle = function(on)
     end
 end
 
+-- =========================================================
+-- TARGET HUD
+-- =========================================================
 local targetHud = Instance.new("Frame")
 targetHud.Size = UDim2.new(0, 220, 0, 70)
 targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
@@ -1635,6 +1964,9 @@ local function getTarget()
     return nil
 end
 
+-- =========================================================
+-- MAIN LOOPS
+-- =========================================================
 local fps = 0
 local frames = 0
 local t0 = tick()
@@ -1658,6 +1990,38 @@ task.spawn(function()
             if hrp then
                 coordLabel.Text = string.format("X: %.1f Y: %.1f Z: %.1f",
                     hrp.Position.X, hrp.Position.Y, hrp.Position.Z)
+            end
+        end
+
+        -- RADAR update
+        if radarMod.enabled then
+            for _, d in ipairs(radarDots) do d.visible = false; d.frame.Visible = false end
+            local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            if myHrp and Camera then
+                local radiusStuds = radarMod.slider and radarMod.slider.value or 150
+                local radarRadius = 80
+                local camLook = Camera.CFrame.LookVector
+                local camYaw = math.atan2(camLook.X, camLook.Z)
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= player and plr.Character then
+                        local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            local delta = hrp.Position - myHrp.Position
+                            local dist = Vector2.new(delta.X, delta.Z).Magnitude
+                            if dist <= radiusStuds then
+                                local angle = math.atan2(delta.X, delta.Z) - camYaw
+                                -- Radar: X = sin(angle) * dist, Y = -cos(angle) * dist (north up = camera forward)
+                                local px = (math.sin(angle) * dist) / radiusStuds * radarRadius
+                                local py = (-math.cos(angle) * dist) / radiusStuds * radarRadius
+                                local dot = getRadarDot()
+                                dot.visible = true
+                                dot.frame.Visible = true
+                                dot.frame.Position = UDim2.new(0.5, px, 0.5, py)
+                                dot.frame.BackgroundColor3 = isSyncUser(plr) and SYNC_COLOR or Color3.fromRGB(255, 60, 60)
+                            end
+                        end
+                    end
+                end
             end
         end
 
@@ -1740,6 +2104,9 @@ task.spawn(function()
     end
 end)
 
+-- =========================================================
+-- FULLBRIGHT
+-- =========================================================
 findMod("Render", "Fullbright").actions.onToggle = function(on)
     if on then
         Lighting.Ambient = Color3.fromRGB(200, 200, 200)
@@ -1752,6 +2119,9 @@ findMod("Render", "Fullbright").actions.onToggle = function(on)
     end
 end
 
+-- =========================================================
+-- PLAYER
+-- =========================================================
 local wsMod = findMod("Player", "WalkSpeed")
 local jpMod = findMod("Player", "JumpPower")
 RunService.Heartbeat:Connect(function()
@@ -1830,6 +2200,9 @@ fovMod.actions.onChange = function(v)
     Camera.FieldOfView = v
 end
 
+-- =========================================================
+-- KILL EFFECT
+-- =========================================================
 local killGui = Instance.new("ScreenGui")
 killGui.Name = "DesolateKill"
 killGui.ResetOnSpawn = false; killGui.IgnoreGuiInset = true
@@ -1874,6 +2247,9 @@ Players.PlayerAdded:Connect(function(plr)
     end)
 end)
 
+-- =========================================================
+-- MISC
+-- =========================================================
 findMod("Misc", "AntiAFK").actions.onToggle = function(on)
     if on then
         if not _G.Desolate_AntiAFK then
@@ -1950,14 +2326,17 @@ end
 findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
     if not on then return end
     for _, f in ipairs({
-        "desolate_hud_watermark.txt", "desolate_hud_fps.txt",
-        "desolate_hud_coords.txt", "desolate_hud_targethud.txt",
+        "desolate_hud_watermark.txt", "desolate_hud_coords.txt",
+        "desolate_hud_targethud.txt", "desolate_hud_radar.txt",
+        "desolate_hud_killcounter.txt",
     }) do
         pcall(function() if isfile(f) then delfile(f) end end)
     end
     watermark.Position = UDim2.new(0, 10, 0, 10)
     coordFrame.Position = UDim2.new(0, 10, 0, 60)
     targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
+    radarFrame.Position = UDim2.new(0, 10, 1, -180)
+    killCounterFrame.Position = UDim2.new(0, 400, 0, 10)
     task.spawn(function()
         task.wait(0.3); findMod("Misc", "Reset HUD Pos").enabled = false; refreshModules()
     end)
