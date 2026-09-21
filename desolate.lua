@@ -1,8 +1,7 @@
--- Desolate Client v4.2.2
--- Xeno loader via request
--- Fixed: China Hat + Particles (watchdog + safe destroy)
+-- Desolate Client v4.3.0
+-- Visuals+ pack
 
-local VERSION = "4.2.2"
+local VERSION = "4.3.0"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -18,6 +17,8 @@ local Lighting         = game:GetService("Lighting")
 local Workspace        = game:GetService("Workspace")
 local VirtualUser      = game:GetService("VirtualUser")
 local TeleportService  = game:GetService("TeleportService")
+local SoundService     = game:GetService("SoundService")
+local StarterGui       = game:GetService("StarterGui")
 local Camera           = Workspace.CurrentCamera
 
 local player = Players.LocalPlayer
@@ -250,12 +251,29 @@ local state = {
             { label = "Light",    min = 0,   max = 10,  value = 4 },
           } },
         { name = "Damage Ind",   enabled = false, actions = {} },
+
+        { name = "Visuals+",         isHeader = true },
+        { name = "Custom Aura",  enabled = false, actions = {},
+          slider = { min = 3, max = 15, value = 6 } },
+        { name = "Player Trails", enabled = false, actions = {},
+          slider = { min = 1, max = 10, value = 4 } },
+        { name = "Highlight Self", enabled = false, actions = {} },
+        { name = "Music Player", enabled = false, actions = {},
+          slider = { min = 1, max = 5, value = 1 } },
+        { name = "Ping Sound",   enabled = false, actions = {} },
+        { name = "Chat Notifs",  enabled = false, actions = {} },
     },
     HUD = {
         { name = "Overlay",       isHeader = true },
         { name = "Coordinates", enabled = false, actions = {} },
         { name = "TargetHUD",   enabled = false, actions = {} },
         { name = "Crosshair",   enabled = false, actions = {} },
+
+        { name = "Crosshair+",    isHeader = true },
+        { name = "Crosshair Shape", enabled = false, actions = {},
+          slider = { min = 1, max = 5, value = 2 } },
+        { name = "Crosshair Rainbow", enabled = false, actions = {},
+          slider = { min = 1, max = 30, value = 8 } },
     },
     Misc = {
         { name = "Utility",       isHeader = true },
@@ -908,6 +926,7 @@ local function applyStaticColors()
     for _, b in ipairs(headerBtns) do
         b.BackgroundColor3 = BG4; b.TextColor3 = TEXT
     end
+    if auraPart then auraPart.Color = ACCENT end
 end
 
 function applyTheme(themeName)
@@ -1031,46 +1050,118 @@ coordLabel.Parent = coordFrame
 findMod("HUD", "Coordinates").actions.onToggle = function(on) coordFrame.Visible = on end
 makeDraggable(coordFrame, "coords", 10, 60)
 
+-- =========================================================
+-- CROSSHAIR (with shape + rainbow)
+-- =========================================================
 local crosshair = Instance.new("Frame")
 crosshair.Name = "Crosshair"
 crosshair.AnchorPoint = Vector2.new(0.5, 0.5)
 crosshair.Position = UDim2.new(0.5, 0, 0.5, 0)
-crosshair.Size = UDim2.new(0, 20, 0, 20)
+crosshair.Size = UDim2.new(0, 30, 0, 30)
 crosshair.BackgroundTransparency = 1
 crosshair.Visible = false; crosshair.Parent = hudGui
 
 local chMode = "circle"
+local shapeMod = findMod("HUD", "Crosshair Shape")
+local rainbowMod = findMod("HUD", "Crosshair Rainbow")
+
+local SHAPES = { "dot", "circle", "cross", "x", "square" }
+
+local function getCrosshairColor()
+    if rainbowMod.enabled then
+        local speed = rainbowMod.slider.value
+        local t = tick() * (speed / 10)
+        return Color3.fromHSV(t % 1, 1, 1)
+    end
+    return ACCENT
+end
+
 function buildCrosshair()
     if not crosshair or not crosshair.Parent then return end
     for _, c in ipairs(crosshair:GetChildren()) do c:Destroy() end
+    local color = getCrosshairColor()
+
     if chMode == "dot" then
         local dot = Instance.new("Frame")
-        dot.Size = UDim2.new(0, 3, 0, 3); dot.Position = UDim2.new(0.5, -1, 0.5, -1)
-        dot.BackgroundColor3 = ACCENT; dot.BorderSizePixel = 0; dot.Parent = crosshair
+        dot.Size = UDim2.new(0, 4, 0, 4); dot.Position = UDim2.new(0.5, -2, 0.5, -2)
+        dot.BackgroundColor3 = color; dot.BorderSizePixel = 0; dot.Parent = crosshair
         Instance.new("UICorner", dot).CornerRadius = UDim.new(0, 999)
     elseif chMode == "circle" then
+        local c = Instance.new("Frame")
+        c.Size = UDim2.new(0, 16, 0, 16); c.Position = UDim2.new(0.5, -8, 0.5, -8)
+        c.BackgroundTransparency = 1; c.Parent = crosshair
+        local st2 = Instance.new("UIStroke")
+        st2.Color = color; st2.Thickness = 1.5; st2.Parent = c
+        Instance.new("UICorner", c).CornerRadius = UDim.new(0, 999)
+    elseif chMode == "cross" then
+        for _, data in ipairs({
+            { UDim2.new(0, 1, 0, 10), UDim2.new(0.5, -0.5, 0.5, -12) },
+            { UDim2.new(0, 1, 0, 10), UDim2.new(0.5, -0.5, 0.5, 2) },
+            { UDim2.new(0, 10, 0, 1), UDim2.new(0.5, -12, 0.5, -0.5) },
+            { UDim2.new(0, 10, 0, 1), UDim2.new(0.5, 2, 0.5, -0.5) },
+        }) do
+            local bar = Instance.new("Frame")
+            bar.Size = data[1]; bar.Position = data[2]
+            bar.BackgroundColor3 = color; bar.BorderSizePixel = 0; bar.Parent = crosshair
+        end
+    elseif chMode == "x" then
+        for _, data in ipairs({
+            { UDim2.new(0, 12, 0, 2), UDim2.new(0.5, -6, 0.5, -1), 45 },
+            { UDim2.new(0, 12, 0, 2), UDim2.new(0.5, -6, 0.5, -1), -45 },
+        }) do
+            local bar = Instance.new("Frame")
+            bar.Size = data[1]; bar.Position = data[2]; bar.Rotation = data[3]
+            bar.BackgroundColor3 = color; bar.BorderSizePixel = 0
+            bar.AnchorPoint = Vector2.new(0, 0.5)
+            bar.Parent = crosshair
+        end
+    elseif chMode == "square" then
         local c = Instance.new("Frame")
         c.Size = UDim2.new(0, 14, 0, 14); c.Position = UDim2.new(0.5, -7, 0.5, -7)
         c.BackgroundTransparency = 1; c.Parent = crosshair
         local st2 = Instance.new("UIStroke")
-        st2.Color = ACCENT; st2.Thickness = 1.5; st2.Parent = c
-        Instance.new("UICorner", c).CornerRadius = UDim.new(0, 999)
-    elseif chMode == "cross" then
-        for _, data in ipairs({
-            { UDim2.new(0, 1, 0, 8), UDim2.new(0.5, -0.5, 0.5, -10) },
-            { UDim2.new(0, 1, 0, 8), UDim2.new(0.5, -0.5, 0.5, 2) },
-            { UDim2.new(0, 8, 0, 1), UDim2.new(0.5, -10, 0.5, -0.5) },
-            { UDim2.new(0, 8, 0, 1), UDim2.new(0.5, 2, 0.5, -0.5) },
-        }) do
-            local bar = Instance.new("Frame")
-            bar.Size = data[1]; bar.Position = data[2]
-            bar.BackgroundColor3 = ACCENT; bar.BorderSizePixel = 0; bar.Parent = crosshair
-        end
+        st2.Color = color; st2.Thickness = 1.5; st2.Parent = c
+        Instance.new("UICorner", c).CornerRadius = UDim.new(0, 2)
     end
 end
 buildCrosshair()
+
 findMod("HUD", "Crosshair").actions.onToggle = function(on) crosshair.Visible = on end
 
+shapeMod.actions.onToggle = function(on)
+    chMode = SHAPES[math.floor(shapeMod.slider.value)] or "circle"
+    buildCrosshair()
+end
+shapeMod.actions.onChange = function(v)
+    chMode = SHAPES[math.floor(v)] or "circle"
+    buildCrosshair()
+end
+
+rainbowMod.actions.onToggle = function(on)
+    if on then
+        buildCrosshair()
+        -- update handler
+        if _G.Desolate_ChRainbow_Conn then _G.Desolate_ChRainbow_Conn:Disconnect() end
+        _G.Desolate_ChRainbow_Conn = RunService.RenderStepped:Connect(function()
+            if not rainbowMod.enabled or not crosshair.Visible then return end
+            local color = getCrosshairColor()
+            for _, child in ipairs(crosshair:GetChildren()) do
+                if child:IsA("Frame") and child.BackgroundColor3 ~= Color3.new() then
+                    child.BackgroundColor3 = color
+                end
+                local uiStroke = child:FindFirstChildOfClass("UIStroke")
+                if uiStroke then uiStroke.Color = color end
+            end
+        end)
+    else
+        if _G.Desolate_ChRainbow_Conn then _G.Desolate_ChRainbow_Conn:Disconnect(); _G.Desolate_ChRainbow_Conn = nil end
+        buildCrosshair()
+    end
+end
+
+-- =========================================================
+-- NAMETAGS
+-- =========================================================
 local nametagFolder = Instance.new("Folder")
 nametagFolder.Name = "DesolateNameTags"; nametagFolder.Parent = hudGui
 local nametags = {}
@@ -1150,6 +1241,9 @@ Players.PlayerRemoving:Connect(function(plr)
     end
 end)
 
+-- =========================================================
+-- ESP
+-- =========================================================
 local espHighlights = {}
 findMod("Render", "ESP").actions.onToggle = function(on)
     if on then
@@ -1170,6 +1264,44 @@ findMod("Render", "ESP").actions.onToggle = function(on)
     end
 end
 
+-- =========================================================
+-- HIGHLIGHT SELF
+-- =========================================================
+local selfHighlight = nil
+findMod("Render", "Highlight Self").actions.onToggle = function(on)
+    if selfHighlight then selfHighlight:Destroy(); selfHighlight = nil end
+    if not on then return end
+    local char = player.Character
+    if not char then return end
+    selfHighlight = Instance.new("Highlight")
+    selfHighlight.Name = "DesolateSelfHL"
+    selfHighlight.Adornee = char
+    selfHighlight.FillColor = ACCENT
+    selfHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    selfHighlight.FillTransparency = 0.75
+    selfHighlight.OutlineTransparency = 0.2
+    selfHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    selfHighlight.Parent = char
+end
+player.CharacterAdded:Connect(function(char)
+    task.wait(0.5)
+    if findMod("Render", "Highlight Self").enabled then
+        if selfHighlight then selfHighlight:Destroy() end
+        selfHighlight = Instance.new("Highlight")
+        selfHighlight.Name = "DesolateSelfHL"
+        selfHighlight.Adornee = char
+        selfHighlight.FillColor = ACCENT
+        selfHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        selfHighlight.FillTransparency = 0.75
+        selfHighlight.OutlineTransparency = 0.2
+        selfHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        selfHighlight.Parent = char
+    end
+end)
+
+-- =========================================================
+-- JUMP CIRCLE
+-- =========================================================
 local jumpRings = {}
 findMod("Render", "JumpCircle").actions.onToggle = function(on)
     if not on then
@@ -1215,7 +1347,86 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- =========================================================
--- TRAILS
+-- CUSTOM AURA
+-- =========================================================
+local auraPart = nil
+local auraAccum = 0
+local auraMod = findMod("Render", "Custom Aura")
+
+findMod("Render", "Custom Aura").actions.onToggle = function(on)
+    if not on and auraPart then auraPart:Destroy(); auraPart = nil end
+end
+
+RunService.Heartbeat:Connect(function(dt)
+    if not auraMod.enabled then return end
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local radius = auraMod.slider.value
+    if not auraPart or not auraPart.Parent then
+        auraPart = Instance.new("Part")
+        auraPart.Name = "DesolateAura"
+        auraPart.Shape = Enum.PartType.Cylinder
+        auraPart.Material = Enum.Material.Neon
+        auraPart.Color = ACCENT
+        auraPart.Anchored = true
+        auraPart.CanCollide = false
+        auraPart.CanQuery = false
+        auraPart.CanTouch = false
+        auraPart.CastShadow = false
+        auraPart.LightInfluence = 0
+        auraPart.Transparency = 0.3
+        auraPart.Size = Vector3.new(0.15, radius * 2, radius * 2)
+        auraPart.Parent = Workspace
+    end
+
+    auraAccum += dt
+    local t = tick()
+    local pulse = 1 + math.sin(t * 3) * 0.08
+    local finalR = radius * pulse
+    auraPart.Size = Vector3.new(0.15, finalR * 2, finalR * 2)
+    auraPart.CFrame = CFrame.new(hrp.Position - Vector3.new(0, 2.7, 0)) * CFrame.Angles(0, t * 1.5, math.rad(90))
+    auraPart.Color = ACCENT
+    auraPart.Transparency = 0.3
+end)
+
+-- =========================================================
+-- PLAYER TRAILS (all players)
+-- =========================================================
+local playerTrailMod = findMod("Render", "Player Trails")
+local playerTrailAccum = 0
+
+RunService.Heartbeat:Connect(function(dt)
+    if not playerTrailMod.enabled then return end
+    playerTrailAccum += dt
+    if playerTrailAccum < 0.08 then return end
+    playerTrailAccum = 0
+    local count = math.floor(playerTrailMod.slider.value)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character then
+            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local p = Instance.new("Part")
+                p.Size = Vector3.new(0.3, 0.3, 0.3)
+                p.Anchored = true; p.CanCollide = false; p.CanQuery = false
+                p.Material = Enum.Material.Neon
+                p.Color = ACCENT
+                p.Transparency = 0.3
+                p.CFrame = CFrame.new(hrp.Position - Vector3.new(0, 1.5, 0))
+                p.Parent = Workspace
+                TweenService:Create(p, TweenInfo.new(0.9), {
+                    Transparency = 1, Size = Vector3.new(0.05, 0.05, 0.05)
+                }):Play()
+                task.delay(1, function() if p and p.Parent then p:Destroy() end end)
+            end
+        end
+    end
+end)
+
+-- =========================================================
+-- TRAILS (own)
 -- =========================================================
 local trailAccum = 0
 RunService.Heartbeat:Connect(function(dt)
@@ -1250,7 +1461,7 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- =========================================================
--- PARTICLES (falling) — FIXED
+-- PARTICLES (falling)
 -- =========================================================
 local particlesMod = findMod("Render", "Particles")
 
@@ -1319,10 +1530,8 @@ particlesMod.actions.onSliderChange = function(idx, v)
     local em = att:FindFirstChild("Emitter")
     if not em then return end
 
-    if idx == 1 then
-        em.Rate = v
-    elseif idx == 2 then
-        em.Speed = NumberRange.new(v)
+    if idx == 1 then em.Rate = v
+    elseif idx == 2 then em.Speed = NumberRange.new(v)
     elseif idx == 3 then
         em.Size = NumberSequence.new({
             NumberSequenceKeypoint.new(0, v / 5),
@@ -1337,7 +1546,6 @@ player.CharacterAdded:Connect(function()
     if particlesMod.enabled then buildParticles() end
 end)
 
--- Watchdog: always keep particles alive
 RunService.Heartbeat:Connect(function()
     if not particlesMod.enabled then return end
     local char = player.Character
@@ -1447,7 +1655,7 @@ presetMod.actions.onChange = function(v)
 end
 
 -- =========================================================
--- CHINA HAT — FIXED
+-- CHINA HAT
 -- =========================================================
 local chinaParts = {}
 local chinaPointLight = nil
@@ -1489,12 +1697,8 @@ local function buildChinaHat()
         p.Material = Enum.Material.Neon
         p.Color = ACCENT
         p.Size = Vector3.new(layer.t, layer.r * 2, layer.r * 2)
-        p.CanCollide = false
-        p.CanQuery = false
-        p.CanTouch = false
-        p.Anchored = true
-        p.CastShadow = false
-        p.Massless = true
+        p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
+        p.Anchored = true; p.CastShadow = false; p.Massless = true
         p.Transparency = transparency
         p.LightInfluence = 0
         p.Parent = Workspace
@@ -1534,7 +1738,6 @@ chinaMod.actions.onSliderChange = function(idx, v)
     end
 end
 
--- Watchdog: always keep hat above head
 RunService.Heartbeat:Connect(function()
     if not chinaMod.enabled then
         if chinaBuilt then destroyChinaHat() end
@@ -1544,12 +1747,10 @@ RunService.Heartbeat:Connect(function()
     if not char then return end
     local head = char:FindFirstChild("Head")
     if not head then return end
-
     if not chinaParts[1] or not chinaParts[1].part or not chinaParts[1].part.Parent then
         buildChinaHat()
         if not chinaParts[1] then return end
     end
-
     local dist = chinaMod.sliders[1] and chinaMod.sliders[1].value or 1.6
     local neonVal = chinaMod.sliders[2] and chinaMod.sliders[2].value or 100
     local transparency = 1 - (neonVal / 100) * 0.95
@@ -1627,7 +1828,18 @@ findMod("Render", "Damage Ind").actions.onToggle = function(on)
             if lastHealth == nil then lastHealth = hum.Health; return end
             if hum.Health < lastHealth then
                 local dmg = math.floor(lastHealth - hum.Health)
-                if dmg > 0 then showDamageIndicator(dmg) end
+                if dmg > 0 then
+                    showDamageIndicator(dmg)
+                    -- ping sound
+                    if findMod("Render", "Ping Sound").enabled then
+                        local snd = Instance.new("Sound")
+                        snd.SoundId = "rbxassetid://90744522311496"
+                        snd.Volume = 0.5
+                        snd.Parent = SoundService
+                        snd:Play()
+                        task.delay(2, function() if snd then snd:Destroy() end end)
+                    end
+                end
             end
             lastHealth = hum.Health
         end)
@@ -1636,6 +1848,127 @@ findMod("Render", "Damage Ind").actions.onToggle = function(on)
         lastHealth = nil
     end
 end
+
+-- =========================================================
+-- PING SOUND (standalone)
+-- =========================================================
+local pingMod = findMod("Render", "Ping Sound")
+local pingSoundConn = nil
+
+pingMod.actions.onToggle = function(on)
+    if on then
+        if pingSoundConn then pingSoundConn:Disconnect() end
+        pingSoundConn = RunService.Heartbeat:Connect(function()
+            -- Sound on low HP (1 time)
+        end)
+    else
+        if pingSoundConn then pingSoundConn:Disconnect(); pingSoundConn = nil end
+    end
+end
+
+-- =========================================================
+-- MUSIC PLAYER
+-- =========================================================
+local MUSIC_TRACKS = {
+    "rbxassetid://1837879082", -- default calm
+    "rbxassetid://1838374206",
+    "rbxassetid://1836700648",
+    "rbxassetid://1837879082",
+    "rbxassetid://1838366234",
+}
+local musicSound = nil
+local musicMod = findMod("Render", "Music Player")
+
+local function playMusic()
+    if musicSound then musicSound:Destroy(); musicSound = nil end
+    if not musicMod.enabled then return end
+    local idx = math.floor(musicMod.slider.value)
+    local id = MUSIC_TRACKS[idx] or MUSIC_TRACKS[1]
+    musicSound = Instance.new("Sound")
+    musicSound.SoundId = id
+    musicSound.Volume = 0.3
+    musicSound.Looped = true
+    musicSound.Parent = SoundService
+    musicSound:Play()
+end
+
+musicMod.actions.onToggle = function(on)
+    if on then playMusic()
+    else if musicSound then musicSound:Destroy(); musicSound = nil end end
+end
+musicMod.actions.onChange = function(v)
+    if not musicMod.enabled then return end
+    playMusic()
+end
+
+-- =========================================================
+-- CHAT NOTIFICATIONS
+-- =========================================================
+local notifGui = Instance.new("ScreenGui")
+notifGui.Name = "DesolateNotifs"
+notifGui.ResetOnSpawn = false; notifGui.IgnoreGuiInset = true
+notifGui.DisplayOrder = 995
+if gethui then local ok, h = pcall(gethui); if ok and h then notifGui.Parent = h end end
+if not notifGui.Parent then
+    local ok = pcall(function() notifGui.Parent = game:GetService("CoreGui") end)
+    if not ok or not notifGui.Parent then notifGui.Parent = player:WaitForChild("PlayerGui") end
+end
+
+local notifContainer = Instance.new("Frame")
+notifContainer.Size = UDim2.new(0, 260, 0, 300)
+notifContainer.Position = UDim2.new(1, -280, 0, 60)
+notifContainer.BackgroundTransparency = 1
+notifContainer.Parent = notifGui
+
+local notifList = Instance.new("UIListLayout")
+notifList.Padding = UDim.new(0, 5)
+notifList.SortOrder = Enum.SortOrder.LayoutOrder
+notifList.Parent = notifContainer
+
+local function showNotif(text, color)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 26)
+    f.BackgroundColor3 = BG2
+    f.BackgroundTransparency = 0.15
+    f.BorderSizePixel = 0
+    f.Parent = notifContainer
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+
+    local accent = Instance.new("Frame")
+    accent.Size = UDim2.new(0, 3, 1, 0)
+    accent.BackgroundColor3 = color or ACCENT
+    accent.BorderSizePixel = 0; accent.Parent = f
+    Instance.new("UICorner", accent).CornerRadius = UDim.new(0, 6)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.BackgroundTransparency = 1
+    lbl.Position = UDim2.new(0, 10, 0, 0)
+    lbl.Size = UDim2.new(1, -14, 1, 0)
+    lbl.Font = FONT; lbl.TextSize = 11
+    lbl.TextColor3 = TEXT
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Text = text
+    lbl.Parent = f
+
+    TweenService:Create(f, TweenInfo.new(4), { BackgroundTransparency = 1 }):Play()
+    TweenService:Create(lbl, TweenInfo.new(4), { TextTransparency = 1 }):Play()
+    TweenService:Create(accent, TweenInfo.new(4), { BackgroundTransparency = 1 }):Play()
+    task.delay(4.2, function() if f and f.Parent then f:Destroy() end end)
+end
+
+local notifMod = findMod("Render", "Chat Notifs")
+notifMod.actions.onToggle = function(on) end
+
+Players.PlayerAdded:Connect(function(plr)
+    if notifMod.enabled then
+        showNotif(plr.Name .. " joined", Color3.fromRGB(80, 255, 80))
+    end
+end)
+Players.PlayerRemoving:Connect(function(plr)
+    if notifMod.enabled then
+        showNotif(plr.Name .. " left", Color3.fromRGB(255, 80, 80))
+    end
+end)
 
 -- =========================================================
 -- TARGET HUD
@@ -1800,6 +2133,9 @@ task.spawn(function()
     end
 end)
 
+-- =========================================================
+-- FULLBRIGHT
+-- =========================================================
 findMod("Render", "Fullbright").actions.onToggle = function(on)
     if on then
         Lighting.Ambient = Color3.fromRGB(200, 200, 200)
@@ -1812,6 +2148,9 @@ findMod("Render", "Fullbright").actions.onToggle = function(on)
     end
 end
 
+-- =========================================================
+-- PLAYER
+-- =========================================================
 local wsMod = findMod("Player", "WalkSpeed")
 local jpMod = findMod("Player", "JumpPower")
 RunService.Heartbeat:Connect(function()
@@ -1890,6 +2229,9 @@ fovMod.actions.onChange = function(v)
     Camera.FieldOfView = v
 end
 
+-- =========================================================
+-- KILL EFFECT
+-- =========================================================
 local killGui = Instance.new("ScreenGui")
 killGui.Name = "DesolateKill"
 killGui.ResetOnSpawn = false; killGui.IgnoreGuiInset = true
@@ -1934,6 +2276,9 @@ Players.PlayerAdded:Connect(function(plr)
     end)
 end)
 
+-- =========================================================
+-- MISC
+-- =========================================================
 findMod("Misc", "AntiAFK").actions.onToggle = function(on)
     if on then
         if not _G.Desolate_AntiAFK then
@@ -2010,8 +2355,8 @@ end
 findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
     if not on then return end
     for _, f in ipairs({
-        "desolate_hud_watermark.txt", "desolate_hud_fps.txt",
-        "desolate_hud_coords.txt", "desolate_hud_targethud.txt",
+        "desolate_hud_watermark.txt", "desolate_hud_coords.txt",
+        "desolate_hud_targethud.txt",
     }) do
         pcall(function() if isfile(f) then delfile(f) end end)
     end
