@@ -1,10 +1,10 @@
 --[[
-    Desolate Client — v4.0.0
+    Desolate Client — v4.0.1
     Xeno v1.3.60+ | loadstring(game:HttpGet("URL"))()
-    New: Hat distance, Rounded UI, Section headers, Profile+Auth panel, Themes
+    Fix: SubMenu renders in its own ScreenGui on top
 ]]
 
-local VERSION = "4.0.0"
+local VERSION = "4.0.1"
 
 -- =========================================================
 -- AUTH CONFIG
@@ -260,7 +260,6 @@ local THEMES = {
     },
 }
 
--- Глобальные цвета (изменяются через applyTheme)
 local ACCENT = THEMES.Dark.accent
 local BG  = THEMES.Dark.bg
 local BG2 = THEMES.Dark.bg2
@@ -343,7 +342,6 @@ local state = {
     },
 }
 
--- Хелперы для индексов (для действий ниже)
 local function findMod(cat, name)
     for _, m in ipairs(state[cat] or {}) do
         if m.name == name then return m end
@@ -531,7 +529,7 @@ modList.Padding = UDim.new(0, 6); modList.SortOrder = Enum.SortOrder.LayoutOrder
 modList.Parent = modScroll
 
 -- =========================================================
--- PROFILE PANEL (bottom-left)
+-- PROFILE PANEL
 -- =========================================================
 local profileBtn = Instance.new("TextButton")
 profileBtn.Size = UDim2.new(0, 120, 0, 74)
@@ -587,7 +585,6 @@ profHint.TextXAlignment = Enum.TextXAlignment.Center
 profHint.Text = "▸ Settings & Themes"
 profHint.Parent = profileBtn
 
--- Обновление текста подписки
 local function updateProfilePlan()
     if authData.plan == "lifetime" or not authData.expires then
         profPlan.Text = "Lifetime ✓"
@@ -614,7 +611,7 @@ task.spawn(function()
 end)
 
 -- =========================================================
--- BUILDERS (support isHeader + multiple sliders)
+-- MODULE LIST BUILDER
 -- =========================================================
 local currentCat = "Render"
 
@@ -624,21 +621,18 @@ local function refreshModules()
     end
     local list = state[currentCat] or {}
     for i, mod in ipairs(list) do
-        -- Заголовок группы
         if mod.isHeader then
             local hdr = Instance.new("TextLabel")
             hdr.Name = "HDR_" .. mod.name
             hdr.Size = UDim2.new(1, -8, 0, 22)
             hdr.BackgroundTransparency = 1
-            hdr.Font = FONT
-            hdr.TextSize = 11
+            hdr.Font = FONT; hdr.TextSize = 11
             hdr.TextColor3 = ACCENT
             hdr.TextXAlignment = Enum.TextXAlignment.Left
             hdr.Text = "▸ " .. string.upper(mod.name)
             hdr.LayoutOrder = i
             hdr.Parent = modScroll
 
-            -- тонкая линия под заголовком
             local line = Instance.new("Frame")
             line.Size = UDim2.new(1, -8, 0, 1)
             line.BackgroundColor3 = ACCENT
@@ -647,7 +641,6 @@ local function refreshModules()
             line.LayoutOrder = i
             line.Parent = modScroll
         else
-            -- Определяем высоту карточки
             local cardHeight = 30
             if mod.sliders then
                 cardHeight = 30 + #mod.sliders * 22 + 6
@@ -690,7 +683,6 @@ local function refreshModules()
                 if mod.actions.onToggle then pcall(mod.actions.onToggle, mod.enabled) end
             end)
 
-            -- Функция создания одного слайдера
             local function createSlider(sl, yPos, onUpdate)
                 local track = Instance.new("Frame")
                 track.Size = UDim2.new(1, -30, 0, 6); track.Position = UDim2.new(0, 15, 0, yPos)
@@ -749,21 +741,17 @@ local function refreshModules()
                 end)
             end
 
-            -- Одиночный слайдер
             if mod.slider then
                 createSlider(mod.slider, 46, mod.actions.onChange)
                 if mod.actions.onChange then pcall(mod.actions.onChange, mod.slider.value) end
             end
 
-            -- Множественные слайдеры
             if mod.sliders then
                 for idx, sl in ipairs(mod.sliders) do
                     local y = 40 + (idx - 1) * 22
                     createSlider(sl, y, function(v)
                         if mod.actions.onSliderChange then pcall(mod.actions.onSliderChange, idx, v) end
-                        if mod.actions.onChange then pcall(mod.actions.onChange, v) end
                     end)
-                    -- применяем начальное значение
                     if mod.actions.onSliderChange then pcall(mod.actions.onSliderChange, idx, sl.value) end
                 end
             end
@@ -792,17 +780,31 @@ local function refreshCategories()
 end
 
 -- =========================================================
--- SUB-MENU (Themes & Settings)
+-- SUB-MENU (в отдельном ScreenGui поверх всего)
 -- =========================================================
+local subGui = Instance.new("ScreenGui")
+subGui.Name = "DesolateSub_" .. math.random(1, 1e6)
+subGui.ResetOnSpawn = false
+subGui.IgnoreGuiInset = true
+subGui.DisplayOrder = 1001
+if gethui then
+    local ok, h = pcall(gethui)
+    if ok and h then subGui.Parent = h end
+end
+if not subGui.Parent then
+    local ok = pcall(function() subGui.Parent = game:GetService("CoreGui") end)
+    if not ok or not subGui.Parent then subGui.Parent = player:WaitForChild("PlayerGui") end
+end
+
 local subMenu = Instance.new("Frame")
 subMenu.Name = "SubMenu"
-subMenu.Size = UDim2.new(1, 0, 1, 0)
-subMenu.Position = UDim2.new(0, 0, 0, 0)
+subMenu.Size = UDim2.new(0, 500, 0, 400)
+subMenu.Position = UDim2.new(0.5, -250, 0.5, -200)
 subMenu.BackgroundColor3 = BG
 subMenu.BorderSizePixel = 0
 subMenu.Visible = false
-subMenu.ZIndex = 10
-subMenu.Parent = main
+subMenu.Active = true
+subMenu.Parent = subGui
 Instance.new("UICorner", subMenu).CornerRadius = UDim.new(0, 12)
 
 local subStroke = Instance.new("UIStroke")
@@ -839,7 +841,7 @@ local subBody = Instance.new("Frame")
 subBody.Position = UDim2.new(0, 0, 0, 36); subBody.Size = UDim2.new(1, 0, 1, -36)
 subBody.BackgroundTransparency = 1; subBody.Parent = subMenu
 
--- === Секция "Темы" ===
+-- Секция "Темы"
 local themesHdr = Instance.new("TextLabel")
 themesHdr.BackgroundTransparency = 1
 themesHdr.Position = UDim2.new(0, 16, 0, 12)
@@ -881,7 +883,6 @@ local function rebuildThemeGrid()
         btnStroke.Transparency = (currentTheme == tName) and 0 or 0.5
         btnStroke.Parent = btn
 
-        -- цветной кружок
         local dot = Instance.new("Frame")
         dot.Size = UDim2.new(0, 18, 0, 18)
         dot.Position = UDim2.new(0, 10, 0, 10)
@@ -917,7 +918,7 @@ local function rebuildThemeGrid()
     end
 end
 
--- === Секция "Настройки меню" ===
+-- Секция "Настройки меню"
 local settingsHdr = Instance.new("TextLabel")
 settingsHdr.BackgroundTransparency = 1
 settingsHdr.Position = UDim2.new(0, 16, 0, 186)
@@ -931,7 +932,7 @@ settingsHdr.Parent = subBody
 local settingsNote = Instance.new("TextLabel")
 settingsNote.BackgroundTransparency = 1
 settingsNote.Position = UDim2.new(0, 16, 0, 210)
-settingsNote.Size = UDim2.new(1, -32, 0, 60)
+settingsNote.Size = UDim2.new(1, -32, 0, 100)
 settingsNote.Font = FONT; settingsNote.TextSize = 11
 settingsNote.TextColor3 = MUTED
 settingsNote.TextXAlignment = Enum.TextXAlignment.Left
@@ -941,7 +942,7 @@ settingsNote.Text = "• RightShift / кнопка D — открыть/закр
 settingsNote.Parent = subBody
 
 -- =========================================================
--- THEME APPLY (recursive recolor)
+-- THEME APPLY
 -- =========================================================
 local function colorsClose(a, b)
     return math.abs(a.R - b.R) < 0.01
@@ -953,7 +954,6 @@ function applyTheme(themeName)
     local th = THEMES[themeName]
     if not th then return end
 
-    -- строим карту замен
     local replacements = {
         { from = ACCENT, to = th.accent },
         { from = BG,     to = th.bg },
@@ -987,28 +987,23 @@ function applyTheme(themeName)
             local nr = findReplacement(sc)
             if nr then obj.Color = nr end
         end
-        if obj:IsA("Frame") and obj.Name == "AccentBar" then
-            obj.BackgroundColor3 = th.accent
-        end
-        if obj:IsA("Frame") and obj.Name == "StateBar" then
-            if colorsClose(obj.BackgroundColor3, ACCENT) then
-                obj.BackgroundColor3 = th.accent
-            end
+        if obj:IsA("ImageLabel") and obj.BackgroundColor3 then
+            local nr = findReplacement(obj.BackgroundColor3)
+            if nr then obj.BackgroundColor3 = nr end
         end
         for _, child in ipairs(obj:GetChildren()) do recolor(child) end
     end
 
     recolor(gui)
+    recolor(subGui)
     recolor(hudGui)
     recolor(damageIndGui)
     recolor(killGui)
 
-    -- обновляем глобальные цвета
     ACCENT = th.accent
     BG = th.bg; BG2 = th.bg2; BG3 = th.bg3; BG4 = th.bg4
     TEXT = th.text; MUTED = th.muted
 
-    -- принудительный ре-рендер
     refreshCategories()
     refreshModules()
     rebuildThemeGrid()
@@ -1018,10 +1013,17 @@ function applyTheme(themeName)
     print("[Desolate] theme applied:", themeName)
 end
 
--- Открытие/закрытие подменю по клику на профиль
+-- Открытие/закрытие подменю
 profileBtn.MouseButton1Click:Connect(function()
     subMenu.Visible = not subMenu.Visible
-    if subMenu.Visible then rebuildThemeGrid() end
+    if subMenu.Visible then
+        subMenu.Position = main.Position
+        rebuildThemeGrid()
+    end
+end)
+
+main:GetPropertyChangedSignal("Visible"):Connect(function()
+    if not main.Visible then subMenu.Visible = false end
 end)
 
 -- =========================================================
@@ -1478,7 +1480,7 @@ presetMod.actions.onChange = function(v)
 end
 
 -- =========================================================
--- CHINA HAT [Render → China Hat]
+-- CHINA HAT
 -- =========================================================
 local chinaParts = {}
 local chinaPointLight = nil
@@ -1493,7 +1495,6 @@ end
 
 local function buildChinaHat()
     destroyChinaHat()
-    -- 11 слоёв для более плавного конуса
     local layers = {
         { y = 0.00, r = 1.55, t = 0.10 },
         { y = 0.07, r = 1.45, t = 0.10 },
@@ -1702,7 +1703,7 @@ RunService.RenderStepped:Connect(function()
     if now - t0 >= 1 then fps = frames; frames = 0; t0 = now end
 end)
 
--- Main loop
+-- Main update loop
 task.spawn(function()
     while gui.Parent do
         if findMod("Render", "Watermark").enabled then
@@ -1831,7 +1832,7 @@ findMod("Render", "Fullbright").actions.onToggle = function(on)
     end
 end
 
--- === Player actions ===
+-- === Player ===
 local wsMod = findMod("Player", "WalkSpeed")
 local jpMod = findMod("Player", "JumpPower")
 RunService.Heartbeat:Connect(function()
@@ -1936,27 +1937,6 @@ local function showKillEffect(victimName)
         TextTransparency = 1, TextStrokeTransparency = 1,
     }):Play()
     task.delay(1.3, function() if lbl and lbl.Parent then lbl:Destroy() end end)
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr.Name == victimName and plr.Character then
-            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local att = Instance.new("Attachment"); att.Parent = hrp
-                local em = Instance.new("ParticleEmitter")
-                em.Texture = "rbxassetid://243098098"
-                em.Color = ColorSequence.new(ACCENT)
-                em.Size = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 1.5),
-                    NumberSequenceKeypoint.new(1, 0),
-                })
-                em.Lifetime = NumberRange.new(1)
-                em.Speed = NumberRange.new(15)
-                em.SpreadAngle = Vector2.new(180, 180)
-                em.Rate = 0; em.Parent = att; em:Emit(30)
-                task.delay(2, function() if att and att.Parent then att:Destroy() end end)
-            end
-        end
-    end
 end
 
 findMod("Player", "Kill Effect").actions.onToggle = function(on) end
@@ -2096,6 +2076,7 @@ do
             local delta = input.Position - dragStart
             main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
                 startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            if subMenu.Visible then subMenu.Position = main.Position end
         end
     end)
     UserInputService.InputEnded:Connect(function(input)
@@ -2132,9 +2113,7 @@ loadConfig()
 refreshCategories()
 refreshModules()
 
--- применяем загруженную тему
 if currentTheme ~= "Dark" then
-    -- применяем без рекурсии по подменю
     local th = THEMES[currentTheme]
     if th then
         local replacements = {
@@ -2161,9 +2140,13 @@ if currentTheme ~= "Dark" then
                 local nr = findReplacement(obj.Color)
                 if nr then obj.Color = nr end
             end
+            if obj:IsA("ImageLabel") and obj.BackgroundColor3 then
+                local nr = findReplacement(obj.BackgroundColor3)
+                if nr then obj.BackgroundColor3 = nr end
+            end
             for _, c in ipairs(obj:GetChildren()) do recolor(c) end
         end
-        recolor(gui); recolor(hudGui); recolor(damageIndGui); recolor(killGui)
+        recolor(gui); recolor(subGui); recolor(hudGui); recolor(damageIndGui); recolor(killGui)
         ACCENT = th.accent; BG = th.bg; BG2 = th.bg2; BG3 = th.bg3; BG4 = th.bg4
         TEXT = th.text; MUTED = th.muted
         refreshCategories(); refreshModules()
