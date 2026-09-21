@@ -1,10 +1,10 @@
 --[[
-    Desolate Client — v4.1.2
-    Xeno | loadstring(game:HttpGet("https://cdn.jsdelivr.net/..."))()
-    Changes: Arrows удалены полностью
+    Desolate Client — v4.2.0
+    Xeno | request-загрузка
+    Changes: Arrows удалены, Particles падающие, China Hat с Neon+Light
 ]]
 
-local VERSION = "4.1.2"
+local VERSION = "4.2.0"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -194,48 +194,13 @@ end
 if not requireAuth() then return end
 
 local THEMES = {
-    Dark = {
-        accent = Color3.fromRGB(0, 200, 230),
-        bg = Color3.fromRGB(6, 6, 10), bg2 = Color3.fromRGB(10, 10, 14),
-        bg3 = Color3.fromRGB(14, 14, 20), bg4 = Color3.fromRGB(20, 20, 28),
-        text = Color3.fromRGB(200, 200, 210), muted = Color3.fromRGB(100, 100, 115),
-    },
-    Blood = {
-        accent = Color3.fromRGB(255, 40, 40),
-        bg = Color3.fromRGB(12, 4, 4), bg2 = Color3.fromRGB(20, 8, 8),
-        bg3 = Color3.fromRGB(28, 12, 12), bg4 = Color3.fromRGB(40, 18, 18),
-        text = Color3.fromRGB(230, 200, 200), muted = Color3.fromRGB(140, 100, 100),
-    },
-    Ocean = {
-        accent = Color3.fromRGB(60, 180, 255),
-        bg = Color3.fromRGB(4, 8, 14), bg2 = Color3.fromRGB(8, 14, 22),
-        bg3 = Color3.fromRGB(14, 22, 32), bg4 = Color3.fromRGB(20, 30, 44),
-        text = Color3.fromRGB(200, 220, 240), muted = Color3.fromRGB(100, 120, 140),
-    },
-    Purple = {
-        accent = Color3.fromRGB(180, 80, 255),
-        bg = Color3.fromRGB(10, 4, 16), bg2 = Color3.fromRGB(16, 8, 24),
-        bg3 = Color3.fromRGB(22, 12, 32), bg4 = Color3.fromRGB(32, 18, 44),
-        text = Color3.fromRGB(220, 200, 240), muted = Color3.fromRGB(120, 100, 140),
-    },
-    Pink = {
-        accent = Color3.fromRGB(255, 100, 200),
-        bg = Color3.fromRGB(14, 4, 12), bg2 = Color3.fromRGB(22, 8, 18),
-        bg3 = Color3.fromRGB(30, 12, 24), bg4 = Color3.fromRGB(42, 18, 34),
-        text = Color3.fromRGB(240, 200, 220), muted = Color3.fromRGB(140, 100, 120),
-    },
-    Matrix = {
-        accent = Color3.fromRGB(50, 255, 100),
-        bg = Color3.fromRGB(2, 8, 4), bg2 = Color3.fromRGB(4, 12, 6),
-        bg3 = Color3.fromRGB(6, 18, 10), bg4 = Color3.fromRGB(10, 26, 14),
-        text = Color3.fromRGB(200, 255, 210), muted = Color3.fromRGB(100, 140, 110),
-    },
-    Light = {
-        accent = Color3.fromRGB(0, 150, 200),
-        bg = Color3.fromRGB(230, 230, 235), bg2 = Color3.fromRGB(215, 215, 220),
-        bg3 = Color3.fromRGB(200, 200, 210), bg4 = Color3.fromRGB(180, 180, 195),
-        text = Color3.fromRGB(20, 20, 30), muted = Color3.fromRGB(100, 100, 115),
-    },
+    Dark    = { accent = Color3.fromRGB(0, 200, 230), bg = Color3.fromRGB(6, 6, 10),   bg2 = Color3.fromRGB(10, 10, 14),  bg3 = Color3.fromRGB(14, 14, 20),  bg4 = Color3.fromRGB(20, 20, 28),  text = Color3.fromRGB(200, 200, 210), muted = Color3.fromRGB(100, 100, 115) },
+    Blood   = { accent = Color3.fromRGB(255, 40, 40), bg = Color3.fromRGB(12, 4, 4),    bg2 = Color3.fromRGB(20, 8, 8),    bg3 = Color3.fromRGB(28, 12, 12),  bg4 = Color3.fromRGB(40, 18, 18),  text = Color3.fromRGB(230, 200, 200), muted = Color3.fromRGB(140, 100, 100) },
+    Ocean   = { accent = Color3.fromRGB(60, 180, 255),bg = Color3.fromRGB(4, 8, 14),    bg2 = Color3.fromRGB(8, 14, 22),   bg3 = Color3.fromRGB(14, 22, 32),  bg4 = Color3.fromRGB(20, 30, 44),  text = Color3.fromRGB(200, 220, 240), muted = Color3.fromRGB(100, 120, 140) },
+    Purple  = { accent = Color3.fromRGB(180, 80, 255),bg = Color3.fromRGB(10, 4, 16),   bg2 = Color3.fromRGB(16, 8, 24),   bg3 = Color3.fromRGB(22, 12, 32),  bg4 = Color3.fromRGB(32, 18, 44),  text = Color3.fromRGB(220, 200, 240), muted = Color3.fromRGB(120, 100, 140) },
+    Pink    = { accent = Color3.fromRGB(255, 100, 200),bg = Color3.fromRGB(14, 4, 12),  bg2 = Color3.fromRGB(22, 8, 18),   bg3 = Color3.fromRGB(30, 12, 24),  bg4 = Color3.fromRGB(42, 18, 34),  text = Color3.fromRGB(240, 200, 220), muted = Color3.fromRGB(140, 100, 120) },
+    Matrix  = { accent = Color3.fromRGB(50, 255, 100),bg = Color3.fromRGB(2, 8, 4),     bg2 = Color3.fromRGB(4, 12, 6),    bg3 = Color3.fromRGB(6, 18, 10),   bg4 = Color3.fromRGB(10, 26, 14),  text = Color3.fromRGB(200, 255, 210), muted = Color3.fromRGB(100, 140, 110) },
+    Light   = { accent = Color3.fromRGB(0, 150, 200), bg = Color3.fromRGB(230, 230, 235),bg2 = Color3.fromRGB(215, 215, 220),bg3 = Color3.fromRGB(200, 200, 210),bg4 = Color3.fromRGB(180, 180, 195),text = Color3.fromRGB(20, 20, 30),  muted = Color3.fromRGB(100, 100, 115) },
 }
 
 local ACCENT = THEMES.Dark.accent
@@ -274,11 +239,17 @@ local state = {
         { name = "Effects",          isHeader = true },
         { name = "JumpCircle",   enabled = false, actions = {} },
         { name = "Trails",       enabled = false, actions = {} },
-        { name = "Particles",    enabled = false, actions = {} },
+        { name = "Particles",    enabled = false, actions = {},
+          sliders = {
+            { label = "Rate",  min = 1, max = 50, value = 12 },
+            { label = "Speed", min = 5, max = 50, value = 18 },
+            { label = "Size",  min = 1, max = 10, value = 3 },
+          } },
         { name = "China Hat",    enabled = false, actions = {},
           sliders = {
-            { label = "Glow",     min = 0,   max = 100, value = 60 },
             { label = "Distance", min = 0.5, max = 5,   value = 1.6 },
+            { label = "Neon",     min = 0,   max = 100, value = 100 },
+            { label = "Light",    min = 0,   max = 10,  value = 4 },
           } },
         { name = "Damage Ind",   enabled = false, actions = {} },
     },
@@ -325,7 +296,6 @@ local function findMod(cat, name)
     return nil
 end
 
--- SYNC
 local syncSet = {}
 local syncMod = findMod("Render", "Show Desolate Users")
 
@@ -1248,7 +1218,8 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-local trailAccum, particleAccum = 0, 0
+-- ===== Trails (только Trails, Particles отдельно) =====
+local trailAccum = 0
 RunService.Heartbeat:Connect(function(dt)
     local char = player.Character
     if not char then return end
@@ -1278,34 +1249,107 @@ RunService.Heartbeat:Connect(function(dt)
             task.delay(1, function() if att and att.Parent then att:Destroy() end end)
         end
     end
-
-    if findMod("Render", "Particles").enabled then
-        particleAccum += dt
-        if particleAccum >= 0.1 then
-            particleAccum = 0
-            local p = Instance.new("Part")
-            p.Size = Vector3.new(0.2, 0.2, 0.2)
-            p.Anchored = true; p.CanCollide = false; p.CanQuery = false
-            p.Material = Enum.Material.Neon
-            p.Color = ACCENT; p.Transparency = 0.3
-            local angle = math.random() * math.pi * 2
-            p.CFrame = CFrame.new(
-                hrp.Position + Vector3.new(math.cos(angle) * 2, -1 + math.random() * 0.5, math.sin(angle) * 2))
-            p.Parent = Workspace
-            TweenService:Create(p, TweenInfo.new(1), {
-                Transparency = 1, Size = Vector3.new(0.05, 0.05, 0.05)
-            }):Play()
-            task.delay(1.1, function() if p and p.Parent then p:Destroy() end end)
-        end
-    end
 end)
 
+-- =========================================================
+-- PARTICLES (падающие с неба)
+-- =========================================================
+local particlesMod = findMod("Render", "Particles")
+
+local function buildParticles()
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local existing = hrp:FindFirstChild("DesolateFallingEmitter")
+    if existing then existing:Destroy() end
+
+    if not particlesMod.enabled then return end
+
+    local rate  = particlesMod.sliders[1].value
+    local speed = particlesMod.sliders[2].value
+    local size  = particlesMod.sliders[3].value
+
+    local att = Instance.new("Attachment")
+    att.Name = "DesolateFallingEmitter"
+    att.Position = Vector3.new(0, 25, 0)
+    att.Parent = hrp
+
+    local em = Instance.new("ParticleEmitter")
+    em.Name = "Emitter"
+    em.Texture = "rbxassetid://243098098"
+    em.Color = ColorSequence.new(ACCENT)
+    em.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.2),
+        NumberSequenceKeypoint.new(1, 0.9),
+    })
+    em.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, size / 5),
+        NumberSequenceKeypoint.new(1, size / 20),
+    })
+    em.Lifetime = NumberRange.new(3)
+    em.Speed = NumberRange.new(speed)
+    em.Direction = Vector3.new(0, -1, 0)
+    em.SpreadAngle = Vector2.new(20, 20)
+    em.Acceleration = Vector3.new(0, -25, 0)
+    em.Rotation = NumberRange.new(0, 360)
+    em.RotSpeed = NumberRange.new(-90, 90)
+    em.Rate = rate
+    em.LightEmission = 0.6
+    em.LightInfluence = 0
+    em.Parent = att
+end
+
+particlesMod.actions.onToggle = function(on)
+    if on then buildParticles()
+    else
+        local char = player.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local att = hrp:FindFirstChild("DesolateFallingEmitter")
+                if att then att:Destroy() end
+            end
+        end
+    end
+end
+
+particlesMod.actions.onSliderChange = function(idx, v)
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local att = hrp:FindFirstChild("DesolateFallingEmitter")
+    if not att then return end
+    local em = att:FindFirstChild("Emitter")
+    if not em then return end
+
+    if idx == 1 then
+        em.Rate = v
+    elseif idx == 2 then
+        em.Speed = NumberRange.new(v)
+    elseif idx == 3 then
+        em.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, v / 5),
+            NumberSequenceKeypoint.new(1, v / 20),
+        })
+    end
+    em.Color = ColorSequence.new(ACCENT)
+end
+
+player.CharacterAdded:Connect(function()
+    task.wait(1)
+    if particlesMod.enabled then buildParticles() end
+end)
+
+-- ===== Sky / Fog =====
 local SKY_PRESETS = {
-    { name = "Day",        clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
-    { name = "Sunset",     clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
-    { name = "Night",      clockTime = 0,    ambient = Color3.fromRGB(20, 20, 40),    outdoor = Color3.fromRGB(30, 30, 60),    fogColor = Color3.fromRGB(10, 10, 30),    fogEnd = 300 },
-    { name = "Desolate",   clockTime = 22,   ambient = Color3.fromRGB(20, 25, 35),    outdoor = Color3.fromRGB(25, 30, 45),    fogColor = Color3.fromRGB(0, 40, 60),     fogEnd = 250 },
-    { name = "Blood Moon", clockTime = 2,    ambient = Color3.fromRGB(60, 15, 15),    outdoor = Color3.fromRGB(80, 20, 20),    fogColor = Color3.fromRGB(120, 0, 0),     fogEnd = 200 },
+    { clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
+    { clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
+    { clockTime = 0,    ambient = Color3.fromRGB(20, 20, 40),    outdoor = Color3.fromRGB(30, 30, 60),    fogColor = Color3.fromRGB(10, 10, 30),    fogEnd = 300 },
+    { clockTime = 22,   ambient = Color3.fromRGB(20, 25, 35),    outdoor = Color3.fromRGB(25, 30, 45),    fogColor = Color3.fromRGB(0, 40, 60),     fogEnd = 250 },
+    { clockTime = 2,    ambient = Color3.fromRGB(60, 15, 15),    outdoor = Color3.fromRGB(80, 20, 20),    fogColor = Color3.fromRGB(120, 0, 0),     fogEnd = 200 },
 }
 local currentSkyPreset = 4
 local customSkyObj = nil
@@ -1394,6 +1438,9 @@ presetMod.actions.onChange = function(v)
     Lighting.ClockTime = skyMod.slider.value
 end
 
+-- =========================================================
+-- CHINA HAT (v2 — Distance / Neon / Light)
+-- =========================================================
 local chinaParts = {}
 local chinaPointLight = nil
 
@@ -1412,6 +1459,11 @@ local function buildChinaHat()
         { y = 0.56, r = 0.37, t = 0.10 }, { y = 0.63, r = 0.22, t = 0.10 },
         { y = 0.70, r = 0.10, t = 0.12 },
     }
+
+    local neonVal  = chinaMod.sliders[2] and chinaMod.sliders[2].value or 100
+    local lightVal = chinaMod.sliders[3] and chinaMod.sliders[3].value or 4
+    local transparency = 1 - (neonVal / 100) * 0.95
+
     for _, layer in ipairs(layers) do
         local p = Instance.new("Part")
         p.Shape = Enum.PartType.Cylinder
@@ -1420,12 +1472,16 @@ local function buildChinaHat()
         p.Size = Vector3.new(layer.t, layer.r * 2, layer.r * 2)
         p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
         p.Anchored = true; p.CastShadow = false; p.Massless = true
+        p.Transparency = transparency
+        p.LightInfluence = 0
         p.Parent = Workspace
         table.insert(chinaParts, { part = p, offsetY = layer.y })
     end
+
     chinaPointLight = Instance.new("PointLight")
     chinaPointLight.Color = ACCENT
-    chinaPointLight.Brightness = 1; chinaPointLight.Range = 8
+    chinaPointLight.Brightness = lightVal
+    chinaPointLight.Range = lightVal * 6
     chinaPointLight.Shadows = false
     chinaPointLight.Parent = chinaParts[#chinaParts].part
 end
@@ -1435,10 +1491,20 @@ chinaMod.actions.onToggle = function(on)
     if on then buildChinaHat() else destroyChinaHat() end
 end
 chinaMod.actions.onSliderChange = function(idx, v)
-    if idx == 1 and chinaPointLight then
-        local t = v / 100
-        chinaPointLight.Brightness = t * 4
-        chinaPointLight.Range = t * 24
+    if idx == 2 then
+        local transparency = 1 - (v / 100) * 0.95
+        for _, entry in ipairs(chinaParts) do
+            entry.part.Transparency = transparency
+            entry.part.Color = ACCENT
+        end
+        if chinaPointLight then
+            chinaPointLight.Brightness = (v / 100) * 8
+            chinaPointLight.Color = ACCENT
+        end
+    elseif idx == 3 then
+        if chinaPointLight then
+            chinaPointLight.Range = v * 6
+        end
     end
 end
 
@@ -1451,13 +1517,16 @@ RunService.Heartbeat:Connect(function()
     if not chinaParts[1] or not chinaParts[1].part.Parent then
         buildChinaHat(); return
     end
-    local dist = chinaMod.sliders[2] and chinaMod.sliders[2].value or 1.6
+    local dist = chinaMod.sliders[1] and chinaMod.sliders[1].value or 1.6
+    local neonVal = chinaMod.sliders[2] and chinaMod.sliders[2].value or 100
+    local transparency = 1 - (neonVal / 100) * 0.95
     local t = tick()
     local baseCF = head.CFrame * CFrame.new(0, dist + math.sin(t * 2) * 0.06, 0)
         * CFrame.Angles(0, t * 0.8, math.rad(90))
     for _, entry in ipairs(chinaParts) do
         entry.part.CFrame = baseCF * CFrame.new(entry.offsetY, 0, 0)
         entry.part.Color = ACCENT
+        entry.part.Transparency = transparency
     end
     if chinaPointLight then chinaPointLight.Color = ACCENT end
 end)
@@ -1903,7 +1972,7 @@ findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
     task.spawn(function()
         task.wait(0.3); findMod("Misc", "Reset HUD Pos").enabled = false; refreshModules()
     end)
-end
+end)
 
 function applyLoadedModules()
     for cat, list in pairs(state) do
