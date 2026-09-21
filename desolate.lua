@@ -1,7 +1,7 @@
--- Desolate Client v4.2.6
--- Optimized + Visual category + Draw FOV
+-- Desolate Client v4.2.7
+-- Optimized + Visual category + Draw FOV (circle only) + Watermark in HUD
 
-local VERSION = "4.2.6"
+local VERSION = "4.2.7"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -22,7 +22,7 @@ local Camera           = Workspace.CurrentCamera
 local player = Players.LocalPlayer
 
 -- =========================================================
--- CACHE (character / hrp / humanoid)
+-- CACHE
 -- =========================================================
 local CACHE = {
     character = nil, hrp = nil, humanoid = nil, head = nil, isAlive = false,
@@ -262,7 +262,6 @@ local currentTheme = "Dark"
 local state = {
     Visual = {
         { name = "Visuals",          isHeader = true },
-        { name = "Watermark",    enabled = true,  actions = {} },
         { name = "Fullbright",   enabled = false, actions = {} },
         { name = "Custom Sky",   enabled = false, actions = {},
           slider = { min = 0, max = 24, value = 12 } },
@@ -297,9 +296,12 @@ local state = {
 
         { name = "Overlay",          isHeader = true },
         { name = "Draw FOV",     enabled = false, actions = {},
-          slider = { min = 30, max = 180, value = 90 } },
+          slider = { min = 1, max = 30, value = 15 } },
     },
     HUD = {
+        { name = "Info",          isHeader = true },
+        { name = "Watermark",    enabled = true,  actions = {} },
+
         { name = "Overlay",       isHeader = true },
         { name = "Coordinates", enabled = false, actions = {} },
         { name = "TargetHUD",   enabled = false, actions = {} },
@@ -347,7 +349,6 @@ end
 -- =========================================================
 local MOD = {}
 local function cacheModuleRefs()
-    MOD.watermark   = findMod("Visual", "Watermark")
     MOD.fullbright  = findMod("Visual", "Fullbright")
     MOD.customSky   = findMod("Visual", "Custom Sky")
     MOD.skyPreset   = findMod("Visual", "Sky Preset")
@@ -362,6 +363,7 @@ local function cacheModuleRefs()
     MOD.chinaHat    = findMod("Visual", "China Hat")
     MOD.damageInd   = findMod("Visual", "Damage Ind")
     MOD.drawFov     = findMod("Visual", "Draw FOV")
+    MOD.watermark   = findMod("HUD", "Watermark")
     MOD.coords      = findMod("HUD", "Coordinates")
     MOD.targetHUD   = findMod("HUD", "TargetHUD")
     MOD.crosshair   = findMod("HUD", "Crosshair")
@@ -1000,9 +1002,6 @@ local function applyStaticColors()
     buildCrosshair()
     if drawFovFrame then
         drawFovStroke.Color = ACCENT
-        for _, r in ipairs(drawFovRays) do
-            r.BackgroundColor3 = ACCENT
-        end
     end
     mobileBtn.BackgroundColor3 = BG2
     mobileBtn.TextColor3 = ACCENT
@@ -1177,13 +1176,13 @@ buildCrosshair()
 MOD.crosshair.actions.onToggle = function(on) crosshair.Visible = on end
 
 -- =========================================================
--- DRAW FOV
+-- DRAW FOV (circle only)
 -- =========================================================
 local drawFovFrame = Instance.new("Frame")
 drawFovFrame.Name = "DrawFOV"
 drawFovFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 drawFovFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-drawFovFrame.Size = UDim2.new(0, 200, 0, 200)
+drawFovFrame.Size = UDim2.new(0, 300, 0, 300)
 drawFovFrame.BackgroundTransparency = 1
 drawFovFrame.Visible = false
 drawFovFrame.Parent = hudGui
@@ -1200,43 +1199,10 @@ drawFovStroke.Thickness = 1.5
 drawFovStroke.Transparency = 0.4
 drawFovStroke.Parent = drawFovInner
 
-local drawFovRays = {}
-for i = 1, 4 do
-    local ray = Instance.new("Frame")
-    ray.BackgroundColor3 = ACCENT
-    ray.BorderSizePixel = 0
-    ray.AnchorPoint = Vector2.new(0.5, 0.5)
-    ray.BackgroundTransparency = 0.5
-    ray.Parent = drawFovFrame
-    table.insert(drawFovRays, ray)
-end
-
 local function updateDrawFov(v)
-    local vp = Camera.ViewportSize
-    local baseFov = math.rad(70)
-    local targetFov = math.rad(v)
-    local radius = (vp.Y / 2) * (math.tan(targetFov / 2) / math.tan(baseFov / 2))
-    radius = math.clamp(radius, 20, math.min(vp.X, vp.Y) * 0.9)
-
+    -- slider 1-30 → 1 = 20px, 30 = 600px radius
+    local radius = v * 20
     drawFovFrame.Size = UDim2.new(0, radius * 2, 0, radius * 2)
-
-    local half = radius
-    drawFovRays[1].Size = UDim2.new(0, 1, 0, half)
-    drawFovRays[1].Position = UDim2.new(0.5, 0, 0.5, -half / 2)
-
-    drawFovRays[2].Size = UDim2.new(0, 1, 0, half)
-    drawFovRays[2].Position = UDim2.new(0.5, 0, 0.5, half / 2)
-
-    drawFovRays[3].Size = UDim2.new(0, half, 0, 1)
-    drawFovRays[3].Position = UDim2.new(0.5, -half / 2, 0.5, 0)
-
-    drawFovRays[4].Size = UDim2.new(0, half, 0, 1)
-    drawFovRays[4].Position = UDim2.new(0.5, half / 2, 0.5, 0)
-
-    for _, r in ipairs(drawFovRays) do
-        r.BackgroundColor3 = ACCENT
-        r.BackgroundTransparency = 0.5
-    end
     drawFovStroke.Color = ACCENT
 end
 
@@ -1248,13 +1214,6 @@ MOD.drawFov.actions.onChange = function(v)
     if not MOD.drawFov.enabled then return end
     updateDrawFov(v)
 end
-
--- Recalculate radius when viewport changes
-Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-    if MOD.drawFov.enabled then
-        updateDrawFov(MOD.drawFov.slider.value)
-    end
-end)
 
 -- =========================================================
 -- NAMETAGS
