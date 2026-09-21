@@ -1,10 +1,10 @@
 --[[
-    Desolate Client — v3.0.1
+    Desolate Client — v3.1.0
     Xeno v1.3.60+ | loadstring(game:HttpGet("URL"))()
-    Fix: China Hat (anchored, no fall), FPS in Watermark
+    Changes: Removed Block ESP, Cone China Hat with glow slider
 ]]
 
-local VERSION = "3.0.1"
+local VERSION = "3.1.0"
 
 -- =========================================================
 -- AUTH CONFIG
@@ -243,11 +243,11 @@ local state = {
           slider = { min = 0, max = 500, value = 100 } },
         { name = "Sky Preset",   enabled = false, actions = {},      -- [11]
           slider = { min = 1, max = 5, value = 4 } },
-        { name = "China Hat",    enabled = false, actions = {} },    -- [12]
+        { name = "China Hat",    enabled = false, actions = {},      -- [12] ← GLOW SLIDER
+          slider = { min = 0, max = 100, value = 60 } },
         { name = "Time Changer", enabled = false, actions = {},      -- [13]
           slider = { min = 0, max = 24, value = 12 } },
-        { name = "Block ESP",    enabled = false, actions = {} },    -- [14]
-        { name = "Damage Ind",   enabled = false, actions = {} },    -- [15]
+        { name = "Damage Ind",   enabled = false, actions = {} },    -- [14]
     },
     HUD = {
         { name = "Coordinates", enabled = false, actions = {} },     -- [1]
@@ -292,8 +292,7 @@ local function saveConfig()
             }
         end
     end
-    local ok = fs.write(CONFIG_FILE, HttpService:JSONEncode(data))
-    return ok
+    return fs.write(CONFIG_FILE, HttpService:JSONEncode(data))
 end
 
 local function loadConfig()
@@ -319,8 +318,9 @@ local function resetConfig()
     fs.delete(CONFIG_FILE)
     local defaults = {
         ["Custom Sky"] = 12, ["Fog"] = 100, ["Sky Preset"] = 4,
-        ["Time Changer"] = 12, ["AutoClicker"] = 8, ["WalkSpeed"] = 16,
-        ["JumpPower"] = 50, ["Fly"] = 60, ["Reach"] = 10, ["FOV"] = 70,
+        ["China Hat"] = 60, ["Time Changer"] = 12, ["AutoClicker"] = 8,
+        ["WalkSpeed"] = 16, ["JumpPower"] = 50, ["Fly"] = 60,
+        ["Reach"] = 10, ["FOV"] = 70,
     }
     for cat, list in pairs(state) do
         for _, mod in ipairs(list) do
@@ -358,7 +358,6 @@ local stroke = Instance.new("UIStroke")
 stroke.Color = ACCENT; stroke.Thickness = 1; stroke.Transparency = 0.7
 stroke.Parent = main
 
--- Header
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 34)
 header.BackgroundColor3 = BG2; header.BorderSizePixel = 0; header.Parent = main
@@ -405,23 +404,15 @@ local function makeHeaderBtn(text, xOff, onClick)
     return b
 end
 
-makeHeaderBtn("💾", -110, function()
-    local ok = saveConfig()
-    print("[Desolate] config saved:", ok)
-    return ok
-end)
+makeHeaderBtn("💾", -110, function() return saveConfig() end)
 makeHeaderBtn("📂", -80, function()
     local ok = loadConfig()
-    print("[Desolate] config loaded:", ok)
     refreshModules()
     applyLoadedModules()
     return ok
 end)
 makeHeaderBtn("↺", -50, function()
-    resetConfig()
-    refreshModules()
-    applyLoadedModules()
-    print("[Desolate] config reset")
+    resetConfig(); refreshModules(); applyLoadedModules()
     return true
 end)
 
@@ -432,11 +423,9 @@ closeBtn.TextColor3 = TEXT; closeBtn.Font = FONT; closeBtn.TextSize = 14
 closeBtn.Text = "×"; closeBtn.BorderSizePixel = 0; closeBtn.Parent = header
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
 closeBtn.MouseButton1Click:Connect(function()
-    main.Visible = false
-    saveConfig()
+    main.Visible = false; saveConfig()
 end)
 
--- Body
 local body = Instance.new("Frame")
 body.Position = UDim2.new(0, 0, 0, 34); body.Size = UDim2.new(1, 0, 1, -34)
 body.BackgroundTransparency = 1; body.Parent = main
@@ -647,7 +636,6 @@ local function makeDraggable(frame, name, defaultX, defaultY)
     hint.Parent = frame
 end
 
--- === WATERMARK ===
 local watermark = Instance.new("Frame")
 watermark.Size = UDim2.new(0, 380, 0, 40); watermark.Position = UDim2.new(0, 10, 0, 10)
 watermark.BackgroundColor3 = BG2; watermark.BackgroundTransparency = 0.15
@@ -669,7 +657,6 @@ state.Render[1].actions.onToggle = function(on) watermark.Visible = on end
 watermark.Visible = state.Render[1].enabled
 makeDraggable(watermark, "watermark", 10, 10)
 
--- === COORDINATES [HUD 1] ===
 local coordFrame = Instance.new("Frame")
 coordFrame.Size = UDim2.new(0, 200, 0, 24); coordFrame.Position = UDim2.new(0, 10, 0, 60)
 coordFrame.BackgroundColor3 = BG2; coordFrame.BackgroundTransparency = 0.2
@@ -686,7 +673,6 @@ coordLabel.Parent = coordFrame
 state.HUD[1].actions.onToggle = function(on) coordFrame.Visible = on end
 makeDraggable(coordFrame, "coords", 10, 60)
 
--- === CROSSHAIR [HUD 3] ===
 local crosshair = Instance.new("Frame")
 crosshair.Name = "Crosshair"
 crosshair.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1055,13 +1041,77 @@ state.Render[11].actions.onChange = function(v)
     if state.Render[10].enabled then Lighting.FogEnd = state.Render[10].slider.value end
 end
 
--- === CHINA HAT [12] (fixed — anchored, non-physical) ===
-local chinaHat = nil
+-- =========================================================
+-- CHINA HAT [12] — Conical layered hat with glow slider
+-- =========================================================
+local chinaParts = {}
+local chinaPointLight = nil
+
+local function destroyChinaHat()
+    for _, p in ipairs(chinaParts) do
+        if p and p.Parent then p:Destroy() end
+    end
+    chinaParts = {}
+    chinaPointLight = nil
+end
+
+local function buildChinaHat()
+    destroyChinaHat()
+    -- 8 слоёв убывающего радиуса — коническая шляпа
+    local layers = {
+        { y = 0.00, r = 1.50, t = 0.10 },  -- широкий "козырёк"
+        { y = 0.10, r = 1.35, t = 0.10 },
+        { y = 0.20, r = 1.18, t = 0.10 },
+        { y = 0.30, r = 1.00, t = 0.10 },
+        { y = 0.40, r = 0.82, t = 0.10 },
+        { y = 0.50, r = 0.62, t = 0.10 },
+        { y = 0.60, r = 0.42, t = 0.10 },
+        { y = 0.70, r = 0.22, t = 0.10 },
+        { y = 0.80, r = 0.10, t = 0.12 },  -- наконечник
+    }
+    for _, layer in ipairs(layers) do
+        local p = Instance.new("Part")
+        p.Shape = Enum.PartType.Cylinder
+        p.Material = Enum.Material.Neon
+        p.Color = ACCENT
+        p.Size = Vector3.new(layer.t, layer.r * 2, layer.r * 2)
+        p.CanCollide = false
+        p.CanQuery = false
+        p.CanTouch = false
+        p.Anchored = true
+        p.CastShadow = false
+        p.Massless = true
+        p.TopSurface = Enum.SurfaceType.Smooth
+        p.BottomSurface = Enum.SurfaceType.Smooth
+        p.Parent = Workspace
+        table.insert(chinaParts, { part = p, offsetY = layer.y })
+    end
+    -- точечный свет на верхнем наконечнике
+    chinaPointLight = Instance.new("PointLight")
+    chinaPointLight.Color = ACCENT
+    chinaPointLight.Brightness = 1
+    chinaPointLight.Range = 8
+    chinaPointLight.Shadows = false
+    chinaPointLight.Parent = chinaParts[#chinaParts].part
+    -- применяем текущее значение слайдера
+    local t = state.Render[12].slider.value / 100
+    chinaPointLight.Brightness = t * 4
+    chinaPointLight.Range = t * 24
+end
 
 state.Render[12].actions.onToggle = function(on)
-    if not on and chinaHat then
-        chinaHat:Destroy(); chinaHat = nil
+    if on then
+        buildChinaHat()
+    else
+        destroyChinaHat()
     end
+end
+
+state.Render[12].actions.onChange = function(v)
+    if not chinaPointLight then return end
+    local t = v / 100
+    chinaPointLight.Brightness = t * 4
+    chinaPointLight.Range = t * 24
 end
 
 RunService.Heartbeat:Connect(function()
@@ -1071,27 +1121,20 @@ RunService.Heartbeat:Connect(function()
     local head = char:FindFirstChild("Head")
     if not head then return end
 
-    if not chinaHat or not chinaHat.Parent then
-        chinaHat = Instance.new("Part")
-        chinaHat.Shape = Enum.PartType.Cylinder
-        chinaHat.Material = Enum.Material.Neon
-        chinaHat.Color = ACCENT
-        chinaHat.Size = Vector3.new(0.8, 2, 2)
-        chinaHat.CanCollide = false
-        chinaHat.CanQuery = false
-        chinaHat.CanTouch = false
-        chinaHat.Anchored = true
-        chinaHat.CastShadow = false
-        chinaHat.Massless = true
-        chinaHat.Transparency = 0
-        chinaHat.CFrame = head.CFrame
-        chinaHat.Parent = Workspace
+    if not chinaParts[1] or not chinaParts[1].part.Parent then
+        buildChinaHat()
+        return
     end
 
     local t = tick()
-    chinaHat.CFrame = head.CFrame
-        * CFrame.new(0, 1.6 + math.sin(t * 2) * 0.08, 0)
+    local baseCF = head.CFrame * CFrame.new(0, 1.6 + math.sin(t * 2) * 0.06, 0)
         * CFrame.Angles(0, t * 0.8, math.rad(90))
+
+    for _, entry in ipairs(chinaParts) do
+        -- "X" ось цилиндра = вертикаль после поворота на 90° вокруг Z
+        -- смещаем вдоль локальной вертикали шляпы
+        entry.part.CFrame = baseCF * CFrame.new(entry.offsetY, 0, 0)
+    end
 end)
 
 -- === TIME CHANGER [13] ===
@@ -1107,51 +1150,7 @@ state.Render[13].actions.onChange = function(v)
     Lighting.ClockTime = v
 end
 
--- === BLOCK ESP [14] ===
-local blockEspParts = {}
-local blockEspConn = nil
-
-state.Render[14].actions.onToggle = function(on)
-    if on then
-        blockEspConn = RunService.Heartbeat:Connect(function()
-            for part, box in pairs(blockEspParts) do
-                if not part or not part.Parent then
-                    if box then box:Destroy() end
-                    blockEspParts[part] = nil
-                end
-            end
-            local char = player.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            for _, obj in ipairs(Workspace:GetDescendants()) do
-                if obj:IsA("BasePart") and not blockEspParts[obj] then
-                    local name = obj.Name:lower()
-                    if name:find("chest") or name:find("crate") or name:find("loot")
-                       or name:find("pickup") or name:find("drop") then
-                        local dist = (obj.Position - hrp.Position).Magnitude
-                        if dist < 300 then
-                            local box = Instance.new("SelectionBox")
-                            box.Adornee = obj
-                            box.Color3 = Color3.fromRGB(255, 220, 60)
-                            box.LineThickness = 0.05
-                            box.SurfaceTransparency = 1
-                            box.Parent = obj
-                            blockEspParts[obj] = box
-                        end
-                    end
-                end
-            end
-        end)
-    else
-        if blockEspConn then blockEspConn:Disconnect(); blockEspConn = nil end
-        for part, box in pairs(blockEspParts) do
-            if box then box:Destroy() end
-        end
-        blockEspParts = {}
-    end
-end
-
--- === DAMAGE INDICATOR [15] ===
+-- === DAMAGE INDICATOR [14] ===
 local damageIndGui = Instance.new("ScreenGui")
 damageIndGui.Name = "DesolateDmg"
 damageIndGui.ResetOnSpawn = false
@@ -1187,7 +1186,7 @@ local function showDamageIndicator(dmg)
     task.delay(0.9, function() if lbl and lbl.Parent then lbl:Destroy() end end)
 end
 
-state.Render[15].actions.onToggle = function(on)
+state.Render[14].actions.onToggle = function(on)
     if on then
         healthConn = RunService.Heartbeat:Connect(function()
             local char = player.Character
@@ -1273,7 +1272,7 @@ local function getTarget()
 end
 
 -- =========================================================
--- FPS COUNTER (глобальный, для watermark)
+-- FPS COUNTER
 -- =========================================================
 local fps = 0
 local frames = 0
@@ -1436,7 +1435,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Fly [3]
 local flyBV, flyBG
 state.Player[3].actions.onToggle = function(on)
     local char = player.Character
@@ -1471,7 +1469,6 @@ RunService.Heartbeat:Connect(function()
     flyBV.Velocity = move; flyBG.CFrame = camCF
 end)
 
--- BunnyHop [4]
 state.Player[4].actions.onToggle = function(on) end
 RunService.Heartbeat:Connect(function()
     if not state.Player[4].enabled then return end
@@ -1485,7 +1482,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Reach [5]
 state.Player[5].actions.onChange = function(v)
     if not state.Player[5].enabled then return end
     pcall(function() player.Reach = v end)
@@ -1494,7 +1490,6 @@ state.Player[5].actions.onToggle = function(on)
     pcall(function() player.Reach = on and state.Player[5].slider.value or 10 end)
 end
 
--- FOV [6]
 local originalFOV = Camera.FieldOfView
 state.Player[6].actions.onToggle = function(on)
     if on then
@@ -1508,7 +1503,6 @@ state.Player[6].actions.onChange = function(v)
     Camera.FieldOfView = v
 end
 
--- Kill Effect [7]
 local killGui = Instance.new("ScreenGui")
 killGui.Name = "DesolateKill"
 killGui.ResetOnSpawn = false
