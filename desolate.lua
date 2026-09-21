@@ -1,7 +1,6 @@
 --[[
     Desolate Client — v4.1.0
     Xeno v1.3.60+ | loadstring(game:HttpGet("URL"))()
-    Fix: Theme full-apply, Active state, no bars, circular arrows, sync
 ]]
 
 local VERSION = "4.1.0"
@@ -341,14 +340,14 @@ local function findMod(cat, name)
 end
 
 -- =========================================================
--- SYNC (Desolate users detection)
+-- SYNC
 -- =========================================================
-local syncSet = {}   -- [userIdString] = true
+local syncSet = {}
 local syncMod = findMod("Render", "Show Desolate Users")
 
 local function syncPing()
     task.spawn(function()
-        while gui.Parent do
+        while gui and gui.Parent do
             if syncMod.enabled then
                 pcall(function()
                     httpPost(AUTH_URL .. "/sync", {
@@ -365,7 +364,7 @@ end
 
 local function syncFetch()
     task.spawn(function()
-        while gui.Parent do
+        while gui and gui.Parent do
             if syncMod.enabled then
                 local body = httpPost(AUTH_URL .. "/sync", {
                     action = "list",
@@ -564,7 +563,7 @@ local modList = Instance.new("UIListLayout")
 modList.Padding = UDim.new(0, 6); modList.SortOrder = Enum.SortOrder.LayoutOrder
 modList.Parent = modScroll
 
--- === PROFILE ===
+-- PROFILE
 local profileBtn = Instance.new("TextButton")
 profileBtn.Size = UDim2.new(0, 120, 0, 74)
 profileBtn.Position = UDim2.new(0, 8, 1, -82)
@@ -638,7 +637,7 @@ updateProfilePlan()
 task.spawn(function() while gui.Parent do updateProfilePlan(); task.wait(60) end end)
 
 -- =========================================================
--- MODULE LIST (no state bar)
+-- MODULE LIST
 -- =========================================================
 local currentCat = "Render"
 
@@ -656,17 +655,9 @@ local function refreshModules()
             hdr.Font = FONT; hdr.TextSize = 11
             hdr.TextColor3 = ACCENT
             hdr.TextXAlignment = Enum.TextXAlignment.Left
-            hdr.Text = "▸ " .. string.upper(mod.name)
+            hdr.Text = string.upper(mod.name)
             hdr.LayoutOrder = i
             hdr.Parent = modScroll
-
-            local line = Instance.new("Frame")
-            line.Size = UDim2.new(1, -8, 0, 1)
-            line.BackgroundColor3 = ACCENT
-            line.BackgroundTransparency = 0.6
-            line.BorderSizePixel = 0
-            line.LayoutOrder = i
-            line.Parent = modScroll
         else
             local cardHeight = 30
             if mod.sliders then cardHeight = 30 + #mod.sliders * 22 + 6
@@ -856,7 +847,7 @@ themesHdr.Size = UDim2.new(1, -32, 0, 20)
 themesHdr.Font = FONT; themesHdr.TextSize = 12
 themesHdr.TextColor3 = ACCENT
 themesHdr.TextXAlignment = Enum.TextXAlignment.Left
-themesHdr.Text = "▸ THEMES"
+themesHdr.Text = "THEMES"
 themesHdr.Parent = subBody
 
 local themeGrid = Instance.new("Frame")
@@ -911,7 +902,7 @@ local function rebuildThemeGrid()
         sub.Font = FONT; sub.TextSize = 9
         sub.TextColor3 = th.muted
         sub.TextXAlignment = Enum.TextXAlignment.Left
-        sub.Text = (currentTheme == tName) and "● Active" or "click to apply"
+        sub.Text = (currentTheme == tName) and "Active" or "click to apply"
         sub.Parent = btn
 
         btn.MouseButton1Click:Connect(function()
@@ -927,7 +918,7 @@ settingsHdr.Size = UDim2.new(1, -32, 0, 20)
 settingsHdr.Font = FONT; settingsHdr.TextSize = 12
 settingsHdr.TextColor3 = ACCENT
 settingsHdr.TextXAlignment = Enum.TextXAlignment.Left
-settingsHdr.Text = "▸ MENU SETTINGS"
+settingsHdr.Text = "MENU SETTINGS"
 settingsHdr.Parent = subBody
 
 local settingsNote = Instance.new("TextLabel")
@@ -943,7 +934,7 @@ settingsNote.Text = "• RightShift / кнопка D — открыть/закр
 settingsNote.Parent = subBody
 
 -- =========================================================
--- THEME APPLY (full recolor)
+-- THEME APPLY
 -- =========================================================
 local function applyStaticColors()
     main.BackgroundColor3 = BG
@@ -983,26 +974,20 @@ local function applyStaticColors()
     for _, b in ipairs(headerBtns) do
         b.BackgroundColor3 = BG4; b.TextColor3 = TEXT
     end
-    -- arrow radar visuals update
-    if arrowRadar then
+    if arrowRadarRing then
         arrowRadarRing.ImageColor3 = ACCENT
         arrowRadarRing2.ImageColor3 = ACCENT
     end
-    -- arrow colors
-    for _, a in ipairs(arrowPool) do
-        a.TextColor3 = ACCENT
-    end
+    for _, a in ipairs(arrowPool) do a.TextColor3 = ACCENT end
 end
 
 function applyTheme(themeName)
     local th = THEMES[themeName]
     if not th then return end
-
     ACCENT = th.accent
     BG = th.bg; BG2 = th.bg2; BG3 = th.bg3; BG4 = th.bg4
     TEXT = th.text; MUTED = th.muted
     currentTheme = themeName
-
     applyStaticColors()
     refreshCategories()
     refreshModules()
@@ -1160,25 +1145,21 @@ end
 buildCrosshair()
 findMod("HUD", "Crosshair").actions.onToggle = function(on) crosshair.Visible = on end
 
--- =========================================================
--- ARROWS (circular radar)
--- =========================================================
+-- ARROWS
 local arrowRadar = Instance.new("Frame")
 arrowRadar.Name = "ArrowRadar"
 arrowRadar.AnchorPoint = Vector2.new(0.5, 0.5)
 arrowRadar.Position = UDim2.new(0.5, 0, 0.5, 0)
 arrowRadar.Size = UDim2.new(0, 1, 0, 1)
 arrowRadar.BackgroundTransparency = 1
-arrowRadar.Visible = false
-arrowRadar.Parent = hudGui
+arrowRadar.Visible = false; arrowRadar.Parent = hudGui
 
--- Кольцо на границе видимости
 local arrowRadarRing = Instance.new("ImageLabel")
 arrowRadarRing.Name = "Ring"
 arrowRadarRing.AnchorPoint = Vector2.new(0.5, 0.5)
 arrowRadarRing.Position = UDim2.new(0.5, 0, 0.5, 0)
 arrowRadarRing.BackgroundTransparency = 1
-arrowRadarRing.Image = "rbxassetid://3570695787"  -- стандартный круг
+arrowRadarRing.Image = "rbxassetid://3570695787"
 arrowRadarRing.ImageColor3 = ACCENT
 arrowRadarRing.ImageTransparency = 0.7
 arrowRadarRing.Size = UDim2.new(0, 200, 0, 200)
@@ -1223,9 +1204,7 @@ arrowMod.actions.onSliderChange = function(idx, v)
     end
 end
 
--- =========================================================
 -- NAMETAGS
--- =========================================================
 local nametagFolder = Instance.new("Folder")
 nametagFolder.Name = "DesolateNameTags"; nametagFolder.Parent = hudGui
 local nametags = {}
@@ -1305,9 +1284,7 @@ Players.PlayerRemoving:Connect(function(plr)
     end
 end)
 
--- =========================================================
 -- ESP
--- =========================================================
 local espHighlights = {}
 findMod("Render", "ESP").actions.onToggle = function(on)
     if on then
@@ -1328,9 +1305,7 @@ findMod("Render", "ESP").actions.onToggle = function(on)
     end
 end
 
--- =========================================================
--- JumpCircle / Trails / Particles
--- =========================================================
+-- JumpCircle
 local jumpRings = {}
 findMod("Render", "JumpCircle").actions.onToggle = function(on)
     if not on then
@@ -1375,6 +1350,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- Trails / Particles
 local trailAccum, particleAccum = 0, 0
 RunService.Heartbeat:Connect(function(dt)
     local char = player.Character
@@ -1427,9 +1403,7 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- =========================================================
 -- Sky / Fog
--- =========================================================
 local SKY_PRESETS = {
     { name = "Day",        clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
     { name = "Sunset",     clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
@@ -1524,9 +1498,7 @@ presetMod.actions.onChange = function(v)
     Lighting.ClockTime = skyMod.slider.value
 end
 
--- =========================================================
--- CHINA HAT
--- =========================================================
+-- China Hat
 local chinaParts = {}
 local chinaPointLight = nil
 
@@ -1595,7 +1567,7 @@ RunService.Heartbeat:Connect(function()
     if chinaPointLight then chinaPointLight.Color = ACCENT end
 end)
 
--- Time Changer / Damage Ind
+-- Time Changer
 local timeMod = findMod("Render", "Time Changer")
 timeMod.actions.onToggle = function(on)
     if on then Lighting.ClockTime = timeMod.slider.value
@@ -1606,6 +1578,7 @@ timeMod.actions.onChange = function(v)
     Lighting.ClockTime = v
 end
 
+-- Damage Ind
 local damageIndGui = Instance.new("ScreenGui")
 damageIndGui.Name = "DesolateDmg"
 damageIndGui.ResetOnSpawn = false; damageIndGui.IgnoreGuiInset = true
@@ -1656,9 +1629,7 @@ findMod("Render", "Damage Ind").actions.onToggle = function(on)
     end
 end
 
--- =========================================================
--- TARGET HUD
--- =========================================================
+-- Target HUD
 local targetHud = Instance.new("Frame")
 targetHud.Size = UDim2.new(0, 220, 0, 70)
 targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
@@ -1742,7 +1713,6 @@ task.spawn(function()
             end
         end
 
-        -- Arrows (radar)
         if arrowMod.enabled then
             for _, a in ipairs(arrowPool) do a.Visible = false end
             local radius = arrowMod.sliders[1].value
@@ -1782,7 +1752,6 @@ task.spawn(function()
             end
         end
 
-        -- NameTags
         if findMod("Render", "NameTags").enabled then
             for plr, data in pairs(nametags) do
                 if not plr or not plr.Parent then
@@ -1806,7 +1775,6 @@ task.spawn(function()
             end
         end
 
-        -- ESP
         if findMod("Render", "ESP").enabled then
             for plr, hl in pairs(espHighlights) do
                 if not plr or not plr.Character or not plr.Character.Parent then
@@ -1837,7 +1805,6 @@ task.spawn(function()
             end
         end
 
-        -- TargetHUD
         if findMod("HUD", "TargetHUD").enabled then
             local plr, hum = getTarget()
             if plr and hum then
@@ -1995,4 +1962,180 @@ Players.PlayerAdded:Connect(function(plr)
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if not myHrp or not hrp then return end
             if (myHrp.Position - hrp.Position).Magnitude < 60 then
-               
+                showKillEffect(plr.Name)
+            end
+        end)
+    end)
+end)
+
+-- Misc
+findMod("Misc", "AntiAFK").actions.onToggle = function(on)
+    if on then
+        if not _G.Desolate_AntiAFK then
+            _G.Desolate_AntiAFK = player.Idled:Connect(function()
+                pcall(function()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new())
+                end)
+            end)
+        end
+    else
+        if _G.Desolate_AntiAFK then _G.Desolate_AntiAFK:Disconnect(); _G.Desolate_AntiAFK = nil end
+    end
+end
+
+findMod("Misc", "Noclip").actions.onToggle = function(on)
+    if on then
+        if _G.Desolate_Noclip then _G.Desolate_Noclip:Disconnect() end
+        _G.Desolate_Noclip = RunService.Stepped:Connect(function()
+            local char = player.Character
+            if not char then return end
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
+            end
+        end)
+    else
+        if _G.Desolate_Noclip then _G.Desolate_Noclip:Disconnect(); _G.Desolate_Noclip = nil end
+        local char = player.Character
+        if char then
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+                    pcall(function() p.CanCollide = true end)
+                end
+            end
+        end
+    end
+end
+
+findMod("Misc", "AutoClicker").actions.onToggle = function(on) end
+RunService.Heartbeat:Connect(function()
+    if not findMod("Misc", "AutoClicker").enabled then return end
+    local cps = findMod("Misc", "AutoClicker").slider.value
+    local interval = 1 / math.max(cps, 1)
+    if math.random() < math.min(interval, 1) then
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton1(Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2))
+        end)
+    end
+end)
+
+findMod("Misc", "ServerHop").actions.onToggle = function(on)
+    if not on then return end
+    task.spawn(function()
+        local placeId = game.PlaceId
+        local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
+        local ok, body = pcall(function() return game:HttpGet(url) end)
+        if not ok or not body then findMod("Misc", "ServerHop").enabled = false; return end
+        local data = HttpService:JSONDecode(body)
+        if data and data.data then
+            for _, srv in ipairs(data.data) do
+                if srv.playing < srv.maxPlayers and srv.id ~= game.JobId then
+                    pcall(function()
+                        TeleportService:TeleportToPlaceInstance(placeId, srv.id, player)
+                    end)
+                    break
+                end
+            end
+        end
+        findMod("Misc", "ServerHop").enabled = false
+    end)
+end
+
+findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
+    if not on then return end
+    for _, f in ipairs({
+        "desolate_hud_watermark.txt", "desolate_hud_fps.txt",
+        "desolate_hud_coords.txt", "desolate_hud_targethud.txt",
+    }) do
+        pcall(function() if isfile(f) then delfile(f) end end)
+    end
+    watermark.Position = UDim2.new(0, 10, 0, 10)
+    coordFrame.Position = UDim2.new(0, 10, 0, 60)
+    targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
+    task.spawn(function()
+        task.wait(0.3); findMod("Misc", "Reset HUD Pos").enabled = false; refreshModules()
+    end)
+end
+
+-- Apply
+function applyLoadedModules()
+    for cat, list in pairs(state) do
+        for _, mod in ipairs(list) do
+            if not mod.isHeader and mod.actions.onToggle then
+                pcall(mod.actions.onToggle, mod.enabled)
+            end
+        end
+    end
+end
+
+-- Drag + mobile + open key
+do
+    local dragging, dragStart, startPos
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startPos = main.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+           or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            if subMenu.Visible then subMenu.Position = main.Position end
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+    end)
+end
+
+local mobileBtn = Instance.new("TextButton")
+mobileBtn.Size = UDim2.new(0, 44, 0, 44)
+mobileBtn.Position = UDim2.new(0, 10, 0.5, -22)
+mobileBtn.BackgroundColor3 = BG2; mobileBtn.TextColor3 = ACCENT
+mobileBtn.Font = FONT; mobileBtn.TextSize = 16; mobileBtn.Text = "D"
+mobileBtn.BorderSizePixel = 0; mobileBtn.Parent = gui
+Instance.new("UICorner", mobileBtn).CornerRadius = UDim.new(0, 22)
+local mStroke = Instance.new("UIStroke")
+mStroke.Color = ACCENT; mStroke.Thickness = 1; mStroke.Transparency = 0.4
+mStroke.Parent = mobileBtn
+
+mobileBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
+main:GetPropertyChangedSignal("Visible"):Connect(function()
+    mobileBtn.Visible = not main.Visible
+end)
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == OPEN_KEY then main.Visible = not main.Visible end
+end)
+
+-- INIT
+loadConfig()
+refreshCategories()
+refreshModules()
+
+if currentTheme ~= "Dark" then
+    local th = THEMES[currentTheme]
+    if th then
+        ACCENT = th.accent
+        BG = th.bg; BG2 = th.bg2; BG3 = th.bg3; BG4 = th.bg4
+        TEXT = th.text; MUTED = th.muted
+        applyStaticColors()
+        refreshCategories(); refreshModules()
+    end
+end
+
+applyLoadedModules()
+
+watermark.Visible = findMod("Render", "Watermark").enabled
+crosshair.Visible = findMod("HUD", "Crosshair").enabled
+
+syncPing()
+syncFetch()
+
+print("[Desolate] v" .. VERSION .. " loaded · " .. player.Name)
