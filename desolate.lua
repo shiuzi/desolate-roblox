@@ -1,7 +1,7 @@
--- Desolate Client v4.2.5
--- Optimized: cache modules + character, less Heartbeat stress
+-- Desolate Client v4.2.6
+-- Optimized + Visual category + Draw FOV
 
-local VERSION = "4.2.5"
+local VERSION = "4.2.6"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -260,7 +260,7 @@ local currentTheme = "Dark"
 -- STATE
 -- =========================================================
 local state = {
-    Render = {
+    Visual = {
         { name = "Visuals",          isHeader = true },
         { name = "Watermark",    enabled = true,  actions = {} },
         { name = "Fullbright",   enabled = false, actions = {} },
@@ -294,6 +294,10 @@ local state = {
             { label = "Light",    min = 0,   max = 10,  value = 4 },
           } },
         { name = "Damage Ind",   enabled = false, actions = {} },
+
+        { name = "Overlay",          isHeader = true },
+        { name = "Draw FOV",     enabled = false, actions = {},
+          slider = { min = 30, max = 180, value = 90 } },
     },
     HUD = {
         { name = "Overlay",       isHeader = true },
@@ -343,20 +347,21 @@ end
 -- =========================================================
 local MOD = {}
 local function cacheModuleRefs()
-    MOD.watermark   = findMod("Render", "Watermark")
-    MOD.fullbright  = findMod("Render", "Fullbright")
-    MOD.customSky   = findMod("Render", "Custom Sky")
-    MOD.skyPreset   = findMod("Render", "Sky Preset")
-    MOD.fog         = findMod("Render", "Fog")
-    MOD.timeChanger = findMod("Render", "Time Changer")
-    MOD.showUsers   = findMod("Render", "Show Desolate Users")
-    MOD.nameTags    = findMod("Render", "NameTags")
-    MOD.esp         = findMod("Render", "ESP")
-    MOD.jumpCircle  = findMod("Render", "JumpCircle")
-    MOD.trails      = findMod("Render", "Trails")
-    MOD.particles   = findMod("Render", "Particles")
-    MOD.chinaHat    = findMod("Render", "China Hat")
-    MOD.damageInd   = findMod("Render", "Damage Ind")
+    MOD.watermark   = findMod("Visual", "Watermark")
+    MOD.fullbright  = findMod("Visual", "Fullbright")
+    MOD.customSky   = findMod("Visual", "Custom Sky")
+    MOD.skyPreset   = findMod("Visual", "Sky Preset")
+    MOD.fog         = findMod("Visual", "Fog")
+    MOD.timeChanger = findMod("Visual", "Time Changer")
+    MOD.showUsers   = findMod("Visual", "Show Desolate Users")
+    MOD.nameTags    = findMod("Visual", "NameTags")
+    MOD.esp         = findMod("Visual", "ESP")
+    MOD.jumpCircle  = findMod("Visual", "JumpCircle")
+    MOD.trails      = findMod("Visual", "Trails")
+    MOD.particles   = findMod("Visual", "Particles")
+    MOD.chinaHat    = findMod("Visual", "China Hat")
+    MOD.damageInd   = findMod("Visual", "Damage Ind")
+    MOD.drawFov     = findMod("Visual", "Draw FOV")
     MOD.coords      = findMod("HUD", "Coordinates")
     MOD.targetHUD   = findMod("HUD", "TargetHUD")
     MOD.crosshair   = findMod("HUD", "Crosshair")
@@ -668,9 +673,7 @@ end
 updateProfilePlan()
 task.spawn(function() while gui.Parent do updateProfilePlan(); task.wait(60) end end)
 
-local currentCat = "Render"
-
--- ⚡ Cache module refs now that state exists
+local currentCat = "Visual"
 cacheModuleRefs()
 
 local function refreshModules()
@@ -819,7 +822,7 @@ local function refreshCategories()
 end
 
 -- =========================================================
--- SUB MENU (themes)
+-- SUB MENU
 -- =========================================================
 local subGui = Instance.new("ScreenGui")
 subGui.Name = "DesolateSub_" .. math.random(1, 1e6)
@@ -995,6 +998,12 @@ local function applyStaticColors()
     thName.TextColor3 = TEXT
     thInfo.TextColor3 = MUTED
     buildCrosshair()
+    if drawFovFrame then
+        drawFovStroke.Color = ACCENT
+        for _, r in ipairs(drawFovRays) do
+            r.BackgroundColor3 = ACCENT
+        end
+    end
     mobileBtn.BackgroundColor3 = BG2
     mobileBtn.TextColor3 = ACCENT
     mStroke.Color = ACCENT
@@ -1168,6 +1177,86 @@ buildCrosshair()
 MOD.crosshair.actions.onToggle = function(on) crosshair.Visible = on end
 
 -- =========================================================
+-- DRAW FOV
+-- =========================================================
+local drawFovFrame = Instance.new("Frame")
+drawFovFrame.Name = "DrawFOV"
+drawFovFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+drawFovFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+drawFovFrame.Size = UDim2.new(0, 200, 0, 200)
+drawFovFrame.BackgroundTransparency = 1
+drawFovFrame.Visible = false
+drawFovFrame.Parent = hudGui
+
+local drawFovInner = Instance.new("Frame")
+drawFovInner.Size = UDim2.new(1, 0, 1, 0)
+drawFovInner.BackgroundTransparency = 1
+drawFovInner.Parent = drawFovFrame
+Instance.new("UICorner", drawFovInner).CornerRadius = UDim.new(0, 999)
+
+local drawFovStroke = Instance.new("UIStroke")
+drawFovStroke.Color = ACCENT
+drawFovStroke.Thickness = 1.5
+drawFovStroke.Transparency = 0.4
+drawFovStroke.Parent = drawFovInner
+
+local drawFovRays = {}
+for i = 1, 4 do
+    local ray = Instance.new("Frame")
+    ray.BackgroundColor3 = ACCENT
+    ray.BorderSizePixel = 0
+    ray.AnchorPoint = Vector2.new(0.5, 0.5)
+    ray.BackgroundTransparency = 0.5
+    ray.Parent = drawFovFrame
+    table.insert(drawFovRays, ray)
+end
+
+local function updateDrawFov(v)
+    local vp = Camera.ViewportSize
+    local baseFov = math.rad(70)
+    local targetFov = math.rad(v)
+    local radius = (vp.Y / 2) * (math.tan(targetFov / 2) / math.tan(baseFov / 2))
+    radius = math.clamp(radius, 20, math.min(vp.X, vp.Y) * 0.9)
+
+    drawFovFrame.Size = UDim2.new(0, radius * 2, 0, radius * 2)
+
+    local half = radius
+    drawFovRays[1].Size = UDim2.new(0, 1, 0, half)
+    drawFovRays[1].Position = UDim2.new(0.5, 0, 0.5, -half / 2)
+
+    drawFovRays[2].Size = UDim2.new(0, 1, 0, half)
+    drawFovRays[2].Position = UDim2.new(0.5, 0, 0.5, half / 2)
+
+    drawFovRays[3].Size = UDim2.new(0, half, 0, 1)
+    drawFovRays[3].Position = UDim2.new(0.5, -half / 2, 0.5, 0)
+
+    drawFovRays[4].Size = UDim2.new(0, half, 0, 1)
+    drawFovRays[4].Position = UDim2.new(0.5, half / 2, 0.5, 0)
+
+    for _, r in ipairs(drawFovRays) do
+        r.BackgroundColor3 = ACCENT
+        r.BackgroundTransparency = 0.5
+    end
+    drawFovStroke.Color = ACCENT
+end
+
+MOD.drawFov.actions.onToggle = function(on)
+    drawFovFrame.Visible = on
+    if on then updateDrawFov(MOD.drawFov.slider.value) end
+end
+MOD.drawFov.actions.onChange = function(v)
+    if not MOD.drawFov.enabled then return end
+    updateDrawFov(v)
+end
+
+-- Recalculate radius when viewport changes
+Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+    if MOD.drawFov.enabled then
+        updateDrawFov(MOD.drawFov.slider.value)
+    end
+end)
+
+-- =========================================================
 -- NAMETAGS
 -- =========================================================
 local nametagFolder = Instance.new("Folder")
@@ -1318,7 +1407,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- =========================================================
--- TRAILS (optimized: reuse attachment)
+-- TRAILS
 -- =========================================================
 local trailEmitter = nil
 local trailAccum = 0
@@ -1449,12 +1538,12 @@ player.CharacterAdded:Connect(function()
     if MOD.particles.enabled then buildParticles() end
 end)
 
--- ⚡ Optimized watchdog: check every 2s instead of every frame
 task.spawn(function()
     while gui.Parent do
-        task.wait(2)
-        if MOD.particles.enabled and CACHE.hrp then
-            if not CACHE.hrp:FindFirstChild("DesolateFallingEmitter") then
+        task.wait(1)
+        if MOD.particles.enabled then
+            if not CACHE.hrp then refreshCharacterCache() end
+            if CACHE.hrp and not CACHE.hrp:FindFirstChild("DesolateFallingEmitter") then
                 buildParticles()
             end
         end
@@ -1777,12 +1866,16 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- =========================================================
--- MAIN LOOP (throttled)
+-- MAIN LOOP
 -- =========================================================
 task.spawn(function()
     local tickCount = 0
     while gui.Parent do
         tickCount += 1
+
+        if not CACHE.character or not CACHE.hrp or not CACHE.head then
+            refreshCharacterCache()
+        end
 
         if MOD.watermark.enabled then
             local ping = 0
@@ -1796,7 +1889,6 @@ task.spawn(function()
                 CACHE.hrp.Position.X, CACHE.hrp.Position.Y, CACHE.hrp.Position.Z)
         end
 
-        -- NameTags / ESP / TargetHUD — every 2 ticks (0.1s instead of 0.05s)
         if tickCount % 2 == 0 then
             if MOD.nameTags.enabled then
                 for plr, data in pairs(nametags) do
@@ -2189,4 +2281,4 @@ crosshair.Visible = MOD.crosshair.enabled
 syncPing()
 syncFetch()
 
-print("[Desolate] v" .. VERSION .. " loaded (optimized) - " .. player.Name)
+print("[Desolate] v" .. VERSION .. " loaded - " .. player.Name)
