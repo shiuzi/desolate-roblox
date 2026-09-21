@@ -1,14 +1,11 @@
 --[[
-    Desolate Client — v4.0.1
+    Desolate Client — v4.1.0
     Xeno v1.3.60+ | loadstring(game:HttpGet("URL"))()
-    Fix: SubMenu renders in its own ScreenGui on top
+    Fix: Theme full-apply, Active state, no bars, circular arrows, sync
 ]]
 
-local VERSION = "4.0.1"
+local VERSION = "4.1.0"
 
--- =========================================================
--- AUTH CONFIG
--- =========================================================
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
 local HWID_FILE = "desolate_hwid.txt"
@@ -105,14 +102,13 @@ local function validateKey(key)
     return true, data
 end
 
--- === UI активации ===
+-- === Auth UI ===
 local function showKeyUI(opts)
     local ACCENT = Color3.fromRGB(0, 200, 230)
     local BG, BG2 = Color3.fromRGB(6, 6, 10), Color3.fromRGB(14, 14, 20)
     local TEXT, MUTED = Color3.fromRGB(200, 200, 210), Color3.fromRGB(100, 100, 115)
     local ERROR, OK = Color3.fromRGB(255, 60, 60), Color3.fromRGB(60, 255, 130)
     local FONT = Enum.Font.Code
-
     local sg = Instance.new("ScreenGui")
     sg.Name = "DesolateAuth_" .. math.random(1, 1e6)
     sg.ResetOnSpawn = false; sg.IgnoreGuiInset = true; sg.DisplayOrder = 1000
@@ -121,7 +117,6 @@ local function showKeyUI(opts)
         local ok = pcall(function() sg.Parent = game:GetService("CoreGui") end)
         if not ok or not sg.Parent then sg.Parent = player:WaitForChild("PlayerGui") end
     end
-
     local box = Instance.new("Frame")
     box.Size = UDim2.new(0, 400, 0, 220)
     box.Position = UDim2.new(0.5, -200, 0.5, -110)
@@ -129,20 +124,17 @@ local function showKeyUI(opts)
     Instance.new("UICorner", box).CornerRadius = UDim.new(0, 12)
     local st = Instance.new("UIStroke"); st.Color = ACCENT; st.Thickness = 1
     st.Transparency = 0.5; st.Parent = box
-
     local title = Instance.new("TextLabel")
     title.BackgroundTransparency = 1; title.Position = UDim2.new(0, 14, 0, 12)
     title.Size = UDim2.new(1, -28, 0, 22); title.Font = FONT; title.TextSize = 16
     title.TextColor3 = ACCENT; title.TextXAlignment = Enum.TextXAlignment.Left
     title.Text = "Desolate · Activation"; title.Parent = box
-
     local inputHolder = Instance.new("Frame")
     inputHolder.Position = UDim2.new(0, 14, 0, 58)
     inputHolder.Size = UDim2.new(1, -28, 0, 40)
     inputHolder.BackgroundColor3 = BG2; inputHolder.BorderSizePixel = 0
     inputHolder.Parent = box
     Instance.new("UICorner", inputHolder).CornerRadius = UDim.new(0, 8)
-
     local textBox = Instance.new("TextBox")
     textBox.Size = UDim2.new(1, -20, 1, 0); textBox.Position = UDim2.new(0, 10, 0, 0)
     textBox.BackgroundTransparency = 1; textBox.Font = FONT; textBox.TextSize = 14
@@ -150,20 +142,17 @@ local function showKeyUI(opts)
     textBox.PlaceholderColor3 = MUTED
     textBox.TextXAlignment = Enum.TextXAlignment.Left; textBox.ClearTextOnFocus = false
     textBox.Text = opts.initial or ""; textBox.Parent = inputHolder
-
     local status = Instance.new("TextLabel")
     status.BackgroundTransparency = 1; status.Position = UDim2.new(0, 14, 0, 108)
     status.Size = UDim2.new(1, -28, 0, 18); status.Font = FONT; status.TextSize = 12
     status.TextColor3 = MUTED; status.TextXAlignment = Enum.TextXAlignment.Left
     status.Parent = box
-
     local activate = Instance.new("TextButton")
     activate.Size = UDim2.new(1, -28, 0, 36); activate.Position = UDim2.new(0, 14, 1, -50)
     activate.BackgroundColor3 = ACCENT; activate.TextColor3 = Color3.fromRGB(6, 6, 10)
     activate.Font = FONT; activate.TextSize = 14; activate.Text = "ACTIVATE"
     activate.BorderSizePixel = 0; activate.AutoButtonColor = false; activate.Parent = box
     Instance.new("UICorner", activate).CornerRadius = UDim.new(0, 8)
-
     local function tryActivate()
         local key = textBox.Text:gsub("%s+", "")
         if #key < 6 then status.TextColor3 = ERROR; status.Text = "Ключ слишком короткий"; return end
@@ -185,14 +174,12 @@ local function showKeyUI(opts)
 end
 
 local authData = { plan = "lifetime", expires = nil }
-
 local function requireAuth()
     local savedKey = fs.read(KEY_FILE)
     if savedKey and #savedKey >= 6 then
         local ok, info = validateKey(savedKey)
         if ok then
-            authData.plan = info.plan or "lifetime"
-            authData.expires = info.expires
+            authData.plan = info.plan or "lifetime"; authData.expires = info.expires
             return true
         end
         fs.delete(KEY_FILE)
@@ -201,15 +188,13 @@ local function requireAuth()
     showKeyUI({
         initial = savedKey or "",
         onSuccess = function(info)
-            authData.plan = info.plan or "lifetime"
-            authData.expires = info.expires
+            authData.plan = info.plan or "lifetime"; authData.expires = info.expires
             completed, success = true, true
         end,
     })
     while not completed do task.wait(0.1) end
     return success
 end
-
 if not requireAuth() then return end
 
 -- =========================================================
@@ -217,43 +202,43 @@ if not requireAuth() then return end
 -- =========================================================
 local THEMES = {
     Dark = {
-        name = "Dark", accent = Color3.fromRGB(0, 200, 230),
+        accent = Color3.fromRGB(0, 200, 230),
         bg = Color3.fromRGB(6, 6, 10), bg2 = Color3.fromRGB(10, 10, 14),
         bg3 = Color3.fromRGB(14, 14, 20), bg4 = Color3.fromRGB(20, 20, 28),
         text = Color3.fromRGB(200, 200, 210), muted = Color3.fromRGB(100, 100, 115),
     },
     Blood = {
-        name = "Blood", accent = Color3.fromRGB(255, 40, 40),
+        accent = Color3.fromRGB(255, 40, 40),
         bg = Color3.fromRGB(12, 4, 4), bg2 = Color3.fromRGB(20, 8, 8),
         bg3 = Color3.fromRGB(28, 12, 12), bg4 = Color3.fromRGB(40, 18, 18),
         text = Color3.fromRGB(230, 200, 200), muted = Color3.fromRGB(140, 100, 100),
     },
     Ocean = {
-        name = "Ocean", accent = Color3.fromRGB(60, 180, 255),
+        accent = Color3.fromRGB(60, 180, 255),
         bg = Color3.fromRGB(4, 8, 14), bg2 = Color3.fromRGB(8, 14, 22),
         bg3 = Color3.fromRGB(14, 22, 32), bg4 = Color3.fromRGB(20, 30, 44),
         text = Color3.fromRGB(200, 220, 240), muted = Color3.fromRGB(100, 120, 140),
     },
     Purple = {
-        name = "Purple", accent = Color3.fromRGB(180, 80, 255),
+        accent = Color3.fromRGB(180, 80, 255),
         bg = Color3.fromRGB(10, 4, 16), bg2 = Color3.fromRGB(16, 8, 24),
         bg3 = Color3.fromRGB(22, 12, 32), bg4 = Color3.fromRGB(32, 18, 44),
         text = Color3.fromRGB(220, 200, 240), muted = Color3.fromRGB(120, 100, 140),
     },
     Pink = {
-        name = "Pink", accent = Color3.fromRGB(255, 100, 200),
+        accent = Color3.fromRGB(255, 100, 200),
         bg = Color3.fromRGB(14, 4, 12), bg2 = Color3.fromRGB(22, 8, 18),
         bg3 = Color3.fromRGB(30, 12, 24), bg4 = Color3.fromRGB(42, 18, 34),
         text = Color3.fromRGB(240, 200, 220), muted = Color3.fromRGB(140, 100, 120),
     },
     Matrix = {
-        name = "Matrix", accent = Color3.fromRGB(50, 255, 100),
+        accent = Color3.fromRGB(50, 255, 100),
         bg = Color3.fromRGB(2, 8, 4), bg2 = Color3.fromRGB(4, 12, 6),
         bg3 = Color3.fromRGB(6, 18, 10), bg4 = Color3.fromRGB(10, 26, 14),
         text = Color3.fromRGB(200, 255, 210), muted = Color3.fromRGB(100, 140, 110),
     },
     Light = {
-        name = "Light", accent = Color3.fromRGB(0, 150, 200),
+        accent = Color3.fromRGB(0, 150, 200),
         bg = Color3.fromRGB(230, 230, 235), bg2 = Color3.fromRGB(215, 215, 220),
         bg3 = Color3.fromRGB(200, 200, 210), bg4 = Color3.fromRGB(180, 180, 195),
         text = Color3.fromRGB(20, 20, 30), muted = Color3.fromRGB(100, 100, 115),
@@ -269,6 +254,7 @@ local TEXT = THEMES.Dark.text
 local MUTED = THEMES.Dark.muted
 local ERROR = Color3.fromRGB(255, 60, 60)
 local OK = Color3.fromRGB(60, 255, 130)
+local SYNC_COLOR = Color3.fromRGB(50, 255, 100)
 local FONT = Enum.Font.Code
 local OPEN_KEY = Enum.KeyCode.RightShift
 local currentTheme = "Dark"
@@ -291,9 +277,14 @@ local state = {
           slider = { min = 0, max = 24, value = 12 } },
 
         { name = "Player Info",      isHeader = true },
+        { name = "Show Desolate Users", enabled = false, actions = {} },
         { name = "NameTags",     enabled = false, actions = {} },
         { name = "ESP",          enabled = false, actions = {} },
-        { name = "Arrows",       enabled = false, actions = {} },
+        { name = "Arrows",       enabled = false, actions = {},
+          sliders = {
+            { label = "Distance", min = 30, max = 300, value = 100 },
+            { label = "Size",     min = 10, max = 60,  value = 24 },
+          } },
 
         { name = "Effects",          isHeader = true },
         { name = "JumpCircle",   enabled = false, actions = {} },
@@ -350,7 +341,58 @@ local function findMod(cat, name)
 end
 
 -- =========================================================
--- CONFIG SYSTEM
+-- SYNC (Desolate users detection)
+-- =========================================================
+local syncSet = {}   -- [userIdString] = true
+local syncMod = findMod("Render", "Show Desolate Users")
+
+local function syncPing()
+    task.spawn(function()
+        while gui.Parent do
+            if syncMod.enabled then
+                pcall(function()
+                    httpPost(AUTH_URL .. "/sync", {
+                        action = "ping",
+                        userid = tostring(player.UserId),
+                        jobId = tostring(game.JobId),
+                    })
+                end)
+            end
+            task.wait(25)
+        end
+    end)
+end
+
+local function syncFetch()
+    task.spawn(function()
+        while gui.Parent do
+            if syncMod.enabled then
+                local body = httpPost(AUTH_URL .. "/sync", {
+                    action = "list",
+                    jobId = tostring(game.JobId),
+                })
+                if body then
+                    local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
+                    if ok and data and data.users then
+                        local newSet = {}
+                        for _, id in ipairs(data.users) do newSet[tostring(id)] = true end
+                        syncSet = newSet
+                    end
+                end
+            else
+                syncSet = {}
+            end
+            task.wait(20)
+        end
+    end)
+end
+
+local function isSyncUser(plr)
+    return syncSet[tostring(plr.UserId)] == true
+end
+
+-- =========================================================
+-- CONFIG
 -- =========================================================
 local function saveConfig()
     local data = { version = VERSION, theme = currentTheme, modules = {} }
@@ -419,7 +461,6 @@ end
 local gui = Instance.new("ScreenGui")
 gui.Name = "Desolate_" .. math.random(1, 1e6)
 gui.ResetOnSpawn = false; gui.IgnoreGuiInset = true; gui.DisplayOrder = 999
-
 if gethui then local ok, h = pcall(gethui); if ok and h then gui.Parent = h end end
 if not gui.Parent then
     local ok = pcall(function() gui.Parent = game:GetService("CoreGui") end)
@@ -437,7 +478,6 @@ local stroke = Instance.new("UIStroke")
 stroke.Color = ACCENT; stroke.Thickness = 1; stroke.Transparency = 0.6
 stroke.Parent = main
 
--- Header
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 36)
 header.BackgroundColor3 = BG2; header.BorderSizePixel = 0; header.Parent = main
@@ -447,11 +487,6 @@ local headerMask = Instance.new("Frame")
 headerMask.Size = UDim2.new(1, 0, 0, 10); headerMask.Position = UDim2.new(0, 0, 1, -10)
 headerMask.BackgroundColor3 = BG2; headerMask.BorderSizePixel = 0; headerMask.Parent = header
 
-local accentBar = Instance.new("Frame")
-accentBar.Size = UDim2.new(0, 3, 1, 0); accentBar.BackgroundColor3 = ACCENT
-accentBar.BorderSizePixel = 0; accentBar.Parent = header
-Instance.new("UICorner", accentBar).CornerRadius = UDim.new(0, 12)
-
 local titleLbl = Instance.new("TextLabel")
 titleLbl.BackgroundTransparency = 1
 titleLbl.Position = UDim2.new(0, 14, 0, 0); titleLbl.Size = UDim2.new(1, -170, 1, 0)
@@ -460,6 +495,7 @@ titleLbl.TextXAlignment = Enum.TextXAlignment.Left; titleLbl.TextColor3 = ACCENT
 titleLbl.Text = "Desolate · v" .. VERSION
 titleLbl.Parent = header
 
+local headerBtns = {}
 local function makeHeaderBtn(text, xOff, onClick)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(0, 26, 0, 24)
@@ -475,6 +511,7 @@ local function makeHeaderBtn(text, xOff, onClick)
         b.TextColor3 = (ok ~= false) and OK or ERROR
         task.delay(0.4, function() b.TextColor3 = TEXT end)
     end)
+    table.insert(headerBtns, b)
     return b
 end
 
@@ -494,7 +531,6 @@ closeBtn.Text = "×"; closeBtn.BorderSizePixel = 0; closeBtn.Parent = header
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
 closeBtn.MouseButton1Click:Connect(function() main.Visible = false; saveConfig() end)
 
--- Body
 local body = Instance.new("Frame")
 body.Position = UDim2.new(0, 0, 0, 36); body.Size = UDim2.new(1, 0, 1, -36)
 body.BackgroundTransparency = 1; body.Parent = main
@@ -528,9 +564,7 @@ local modList = Instance.new("UIListLayout")
 modList.Padding = UDim.new(0, 6); modList.SortOrder = Enum.SortOrder.LayoutOrder
 modList.Parent = modScroll
 
--- =========================================================
--- PROFILE PANEL
--- =========================================================
+-- === PROFILE ===
 local profileBtn = Instance.new("TextButton")
 profileBtn.Size = UDim2.new(0, 120, 0, 74)
 profileBtn.Position = UDim2.new(0, 8, 1, -82)
@@ -587,13 +621,11 @@ profHint.Parent = profileBtn
 
 local function updateProfilePlan()
     if authData.plan == "lifetime" or not authData.expires then
-        profPlan.Text = "Lifetime ✓"
-        profPlan.TextColor3 = OK
+        profPlan.Text = "Lifetime ✓"; profPlan.TextColor3 = OK
     else
         local left = authData.expires - os.time()
         if left <= 0 then
-            profPlan.Text = "Expired"
-            profPlan.TextColor3 = ERROR
+            profPlan.Text = "Expired"; profPlan.TextColor3 = ERROR
         else
             local days = math.floor(left / 86400)
             local hours = math.floor((left % 86400) / 3600)
@@ -603,15 +635,10 @@ local function updateProfilePlan()
     end
 end
 updateProfilePlan()
-task.spawn(function()
-    while gui.Parent do
-        updateProfilePlan()
-        task.wait(60)
-    end
-end)
+task.spawn(function() while gui.Parent do updateProfilePlan(); task.wait(60) end end)
 
 -- =========================================================
--- MODULE LIST BUILDER
+-- MODULE LIST (no state bar)
 -- =========================================================
 local currentCat = "Render"
 
@@ -642,11 +669,8 @@ local function refreshModules()
             line.Parent = modScroll
         else
             local cardHeight = 30
-            if mod.sliders then
-                cardHeight = 30 + #mod.sliders * 22 + 6
-            elseif mod.slider then
-                cardHeight = 62
-            end
+            if mod.sliders then cardHeight = 30 + #mod.sliders * 22 + 6
+            elseif mod.slider then cardHeight = 62 end
 
             local card = Instance.new("Frame")
             card.Name = mod.name
@@ -654,12 +678,6 @@ local function refreshModules()
             card.BackgroundColor3 = BG3; card.BorderSizePixel = 0
             card.LayoutOrder = i; card.Parent = modScroll
             Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
-
-            local stateBar = Instance.new("Frame")
-            stateBar.Size = UDim2.new(0, 3, 1, 0)
-            stateBar.BackgroundColor3 = mod.enabled and ACCENT or Color3.fromRGB(40, 40, 55)
-            stateBar.BorderSizePixel = 0; stateBar.Parent = card
-            Instance.new("UICorner", stateBar).CornerRadius = UDim.new(0, 8)
 
             local nameLbl = Instance.new("TextLabel")
             nameLbl.BackgroundTransparency = 1
@@ -671,14 +689,13 @@ local function refreshModules()
 
             local checkbox = Instance.new("TextButton")
             checkbox.Size = UDim2.new(0, 18, 0, 18); checkbox.Position = UDim2.new(1, -24, 0, 6)
-            checkbox.BackgroundColor3 = mod.enabled and ACCENT or Color3.fromRGB(30, 30, 40)
+            checkbox.BackgroundColor3 = mod.enabled and ACCENT or BG4
             checkbox.Text = ""; checkbox.BorderSizePixel = 0; checkbox.Parent = card
             Instance.new("UICorner", checkbox).CornerRadius = UDim.new(0, 5)
 
             checkbox.MouseButton1Click:Connect(function()
                 mod.enabled = not mod.enabled
-                checkbox.BackgroundColor3 = mod.enabled and ACCENT or Color3.fromRGB(30, 30, 40)
-                stateBar.BackgroundColor3 = mod.enabled and ACCENT or Color3.fromRGB(40, 40, 55)
+                checkbox.BackgroundColor3 = mod.enabled and ACCENT or BG4
                 nameLbl.TextColor3 = mod.enabled and TEXT or MUTED
                 if mod.actions.onToggle then pcall(mod.actions.onToggle, mod.enabled) end
             end)
@@ -686,7 +703,7 @@ local function refreshModules()
             local function createSlider(sl, yPos, onUpdate)
                 local track = Instance.new("Frame")
                 track.Size = UDim2.new(1, -30, 0, 6); track.Position = UDim2.new(0, 15, 0, yPos)
-                track.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+                track.BackgroundColor3 = BG4
                 track.BorderSizePixel = 0; track.Parent = card
                 Instance.new("UICorner", track).CornerRadius = UDim.new(0, 4)
 
@@ -745,7 +762,6 @@ local function refreshModules()
                 createSlider(mod.slider, 46, mod.actions.onChange)
                 if mod.actions.onChange then pcall(mod.actions.onChange, mod.slider.value) end
             end
-
             if mod.sliders then
                 for idx, sl in ipairs(mod.sliders) do
                     local y = 40 + (idx - 1) * 22
@@ -768,7 +784,7 @@ local function refreshCategories()
         local btn = Instance.new("TextButton")
         btn.Name = catName; btn.Size = UDim2.new(1, 0, 0, 26)
         btn.BackgroundColor3 = (catName == currentCat) and ACCENT or BG4
-        btn.TextColor3 = (catName == currentCat) and Color3.fromRGB(6, 6, 10) or TEXT
+        btn.TextColor3 = (catName == currentCat) and BG or TEXT
         btn.Font = FONT; btn.TextSize = 12; btn.Text = catName
         btn.BorderSizePixel = 0; btn.LayoutOrder = i; btn.Parent = catPanel
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
@@ -780,31 +796,23 @@ local function refreshCategories()
 end
 
 -- =========================================================
--- SUB-MENU (в отдельном ScreenGui поверх всего)
+-- SUB MENU
 -- =========================================================
 local subGui = Instance.new("ScreenGui")
 subGui.Name = "DesolateSub_" .. math.random(1, 1e6)
-subGui.ResetOnSpawn = false
-subGui.IgnoreGuiInset = true
+subGui.ResetOnSpawn = false; subGui.IgnoreGuiInset = true
 subGui.DisplayOrder = 1001
-if gethui then
-    local ok, h = pcall(gethui)
-    if ok and h then subGui.Parent = h end
-end
+if gethui then local ok, h = pcall(gethui); if ok and h then subGui.Parent = h end end
 if not subGui.Parent then
     local ok = pcall(function() subGui.Parent = game:GetService("CoreGui") end)
     if not ok or not subGui.Parent then subGui.Parent = player:WaitForChild("PlayerGui") end
 end
 
 local subMenu = Instance.new("Frame")
-subMenu.Name = "SubMenu"
 subMenu.Size = UDim2.new(0, 500, 0, 400)
 subMenu.Position = UDim2.new(0.5, -250, 0.5, -200)
-subMenu.BackgroundColor3 = BG
-subMenu.BorderSizePixel = 0
-subMenu.Visible = false
-subMenu.Active = true
-subMenu.Parent = subGui
+subMenu.BackgroundColor3 = BG; subMenu.BorderSizePixel = 0
+subMenu.Visible = false; subMenu.Active = true; subMenu.Parent = subGui
 Instance.new("UICorner", subMenu).CornerRadius = UDim.new(0, 12)
 
 local subStroke = Instance.new("UIStroke")
@@ -841,7 +849,6 @@ local subBody = Instance.new("Frame")
 subBody.Position = UDim2.new(0, 0, 0, 36); subBody.Size = UDim2.new(1, 0, 1, -36)
 subBody.BackgroundTransparency = 1; subBody.Parent = subMenu
 
--- Секция "Темы"
 local themesHdr = Instance.new("TextLabel")
 themesHdr.BackgroundTransparency = 1
 themesHdr.Position = UDim2.new(0, 16, 0, 12)
@@ -871,10 +878,8 @@ local function rebuildThemeGrid()
         btn.Size = UDim2.new(0, 105, 0, 50)
         btn.Position = UDim2.new(0, col * 112, 0, row * 58)
         btn.BackgroundColor3 = th.bg3
-        btn.Text = ""
-        btn.BorderSizePixel = 0
-        btn.AutoButtonColor = false
-        btn.Parent = themeGrid
+        btn.Text = ""; btn.BorderSizePixel = 0
+        btn.AutoButtonColor = false; btn.Parent = themeGrid
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 
         local btnStroke = Instance.new("UIStroke")
@@ -887,8 +892,7 @@ local function rebuildThemeGrid()
         dot.Size = UDim2.new(0, 18, 0, 18)
         dot.Position = UDim2.new(0, 10, 0, 10)
         dot.BackgroundColor3 = th.accent
-        dot.BorderSizePixel = 0
-        dot.Parent = btn
+        dot.BorderSizePixel = 0; dot.Parent = btn
         Instance.new("UICorner", dot).CornerRadius = UDim.new(0, 999)
 
         local lbl = Instance.new("TextLabel")
@@ -898,8 +902,7 @@ local function rebuildThemeGrid()
         lbl.Font = FONT; lbl.TextSize = 12
         lbl.TextColor3 = th.text
         lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.Text = tName
-        lbl.Parent = btn
+        lbl.Text = tName; lbl.Parent = btn
 
         local sub = Instance.new("TextLabel")
         sub.BackgroundTransparency = 1
@@ -913,12 +916,10 @@ local function rebuildThemeGrid()
 
         btn.MouseButton1Click:Connect(function()
             applyTheme(tName)
-            rebuildThemeGrid()
         end)
     end
 end
 
--- Секция "Настройки меню"
 local settingsHdr = Instance.new("TextLabel")
 settingsHdr.BackgroundTransparency = 1
 settingsHdr.Position = UDim2.new(0, 16, 0, 186)
@@ -938,82 +939,78 @@ settingsNote.TextColor3 = MUTED
 settingsNote.TextXAlignment = Enum.TextXAlignment.Left
 settingsNote.TextYAlignment = Enum.TextYAlignment.Top
 settingsNote.TextWrapped = true
-settingsNote.Text = "• RightShift / кнопка D — открыть/закрыть меню\n• 💾 — сохранить конфиг, 📂 — загрузить, ↺ — сброс\n• HUD-элементы (Watermark, Coords, TargetHUD) — тянутся мышью\n• Настройки сохраняются автоматически при закрытии"
+settingsNote.Text = "• RightShift / кнопка D — открыть/закрыть\n• 💾 сохранить · 📂 загрузить · ↺ сброс\n• HUD тягается мышью за любой элемент\n• Автосохранение при закрытии"
 settingsNote.Parent = subBody
 
 -- =========================================================
--- THEME APPLY
+-- THEME APPLY (full recolor)
 -- =========================================================
-local function colorsClose(a, b)
-    return math.abs(a.R - b.R) < 0.01
-       and math.abs(a.G - b.G) < 0.01
-       and math.abs(a.B - b.B) < 0.01
+local function applyStaticColors()
+    main.BackgroundColor3 = BG
+    stroke.Color = ACCENT
+    header.BackgroundColor3 = BG2
+    headerMask.BackgroundColor3 = BG2
+    titleLbl.TextColor3 = ACCENT
+    closeBtn.BackgroundColor3 = BG4; closeBtn.TextColor3 = TEXT
+    catPanel.BackgroundColor3 = BG2
+    modPanel.BackgroundColor3 = BG2
+    modScroll.ScrollBarImageColor3 = ACCENT
+    profileBtn.BackgroundColor3 = BG3
+    profileStroke.Color = ACCENT
+    profName.TextColor3 = TEXT
+    profHint.TextColor3 = MUTED
+    subMenu.BackgroundColor3 = BG
+    subStroke.Color = ACCENT
+    subHeader.BackgroundColor3 = BG2
+    subHeaderMask.BackgroundColor3 = BG2
+    backBtn.BackgroundColor3 = BG4; backBtn.TextColor3 = TEXT
+    subTitle.TextColor3 = ACCENT
+    themesHdr.TextColor3 = ACCENT
+    settingsHdr.TextColor3 = ACCENT
+    settingsNote.TextColor3 = MUTED
+    watermark.BackgroundColor3 = BG2
+    wAccent.BackgroundColor3 = ACCENT
+    wLabel.TextColor3 = TEXT
+    coordFrame.BackgroundColor3 = BG2
+    coordLabel.TextColor3 = TEXT
+    targetHud.BackgroundColor3 = BG2
+    thName.TextColor3 = TEXT
+    thInfo.TextColor3 = MUTED
+    buildCrosshair()
+    mobileBtn.BackgroundColor3 = BG2
+    mobileBtn.TextColor3 = ACCENT
+    mStroke.Color = ACCENT
+    for _, b in ipairs(headerBtns) do
+        b.BackgroundColor3 = BG4; b.TextColor3 = TEXT
+    end
+    -- arrow radar visuals update
+    if arrowRadar then
+        arrowRadarRing.ImageColor3 = ACCENT
+        arrowRadarRing2.ImageColor3 = ACCENT
+    end
+    -- arrow colors
+    for _, a in ipairs(arrowPool) do
+        a.TextColor3 = ACCENT
+    end
 end
 
 function applyTheme(themeName)
     local th = THEMES[themeName]
     if not th then return end
 
-    local replacements = {
-        { from = ACCENT, to = th.accent },
-        { from = BG,     to = th.bg },
-        { from = BG2,    to = th.bg2 },
-        { from = BG3,    to = th.bg3 },
-        { from = BG4,    to = th.bg4 },
-        { from = TEXT,   to = th.text },
-        { from = MUTED,  to = th.muted },
-    }
-
-    local function findReplacement(c)
-        for _, r in ipairs(replacements) do
-            if colorsClose(r.from, c) then return r.to end
-        end
-        return nil
-    end
-
-    local function recolor(obj)
-        if obj:IsA("GuiObject") then
-            local bgc = obj.BackgroundColor3
-            local nr = findReplacement(bgc)
-            if nr then obj.BackgroundColor3 = nr end
-        end
-        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-            local tc = obj.TextColor3
-            local nr = findReplacement(tc)
-            if nr then obj.TextColor3 = nr end
-        end
-        if obj:IsA("UIStroke") then
-            local sc = obj.Color
-            local nr = findReplacement(sc)
-            if nr then obj.Color = nr end
-        end
-        if obj:IsA("ImageLabel") and obj.BackgroundColor3 then
-            local nr = findReplacement(obj.BackgroundColor3)
-            if nr then obj.BackgroundColor3 = nr end
-        end
-        for _, child in ipairs(obj:GetChildren()) do recolor(child) end
-    end
-
-    recolor(gui)
-    recolor(subGui)
-    recolor(hudGui)
-    recolor(damageIndGui)
-    recolor(killGui)
-
     ACCENT = th.accent
     BG = th.bg; BG2 = th.bg2; BG3 = th.bg3; BG4 = th.bg4
     TEXT = th.text; MUTED = th.muted
+    currentTheme = themeName
 
+    applyStaticColors()
     refreshCategories()
     refreshModules()
     rebuildThemeGrid()
-
-    currentTheme = themeName
     saveConfig()
     print("[Desolate] theme applied:", themeName)
 end
 
--- Открытие/закрытие подменю
 profileBtn.MouseButton1Click:Connect(function()
     subMenu.Visible = not subMenu.Visible
     if subMenu.Visible then
@@ -1033,7 +1030,6 @@ local hudGui = Instance.new("ScreenGui")
 hudGui.Name = "DesolateHUD_" .. math.random(1, 1e6)
 hudGui.ResetOnSpawn = false; hudGui.IgnoreGuiInset = true
 hudGui.DisplayOrder = 998
-
 if gethui then local ok, h = pcall(gethui); if ok and h then hudGui.Parent = h end end
 if not hudGui.Parent then
     local ok = pcall(function() hudGui.Parent = game:GetService("CoreGui") end)
@@ -1133,7 +1129,8 @@ crosshair.BackgroundTransparency = 1
 crosshair.Visible = true; crosshair.Parent = hudGui
 
 local chMode = "circle"
-local function buildCrosshair()
+function buildCrosshair()
+    if not crosshair or not crosshair.Parent then return end
     for _, c in ipairs(crosshair:GetChildren()) do c:Destroy() end
     if chMode == "dot" then
         local dot = Instance.new("Frame")
@@ -1163,11 +1160,40 @@ end
 buildCrosshair()
 findMod("HUD", "Crosshair").actions.onToggle = function(on) crosshair.Visible = on end
 
--- === Arrows ===
-local arrowsContainer = Instance.new("Frame")
-arrowsContainer.Size = UDim2.new(1, 0, 1, 0)
-arrowsContainer.BackgroundTransparency = 1
-arrowsContainer.Visible = false; arrowsContainer.Parent = hudGui
+-- =========================================================
+-- ARROWS (circular radar)
+-- =========================================================
+local arrowRadar = Instance.new("Frame")
+arrowRadar.Name = "ArrowRadar"
+arrowRadar.AnchorPoint = Vector2.new(0.5, 0.5)
+arrowRadar.Position = UDim2.new(0.5, 0, 0.5, 0)
+arrowRadar.Size = UDim2.new(0, 1, 0, 1)
+arrowRadar.BackgroundTransparency = 1
+arrowRadar.Visible = false
+arrowRadar.Parent = hudGui
+
+-- Кольцо на границе видимости
+local arrowRadarRing = Instance.new("ImageLabel")
+arrowRadarRing.Name = "Ring"
+arrowRadarRing.AnchorPoint = Vector2.new(0.5, 0.5)
+arrowRadarRing.Position = UDim2.new(0.5, 0, 0.5, 0)
+arrowRadarRing.BackgroundTransparency = 1
+arrowRadarRing.Image = "rbxassetid://3570695787"  -- стандартный круг
+arrowRadarRing.ImageColor3 = ACCENT
+arrowRadarRing.ImageTransparency = 0.7
+arrowRadarRing.Size = UDim2.new(0, 200, 0, 200)
+arrowRadarRing.Parent = arrowRadar
+
+local arrowRadarRing2 = Instance.new("ImageLabel")
+arrowRadarRing2.Name = "Ring2"
+arrowRadarRing2.AnchorPoint = Vector2.new(0.5, 0.5)
+arrowRadarRing2.Position = UDim2.new(0.5, 0, 0.5, 0)
+arrowRadarRing2.BackgroundTransparency = 1
+arrowRadarRing2.Image = "rbxassetid://3570695787"
+arrowRadarRing2.ImageColor3 = ACCENT
+arrowRadarRing2.ImageTransparency = 0.9
+arrowRadarRing2.Size = UDim2.new(0, 100, 0, 100)
+arrowRadarRing2.Parent = arrowRadar
 
 local arrowPool = {}
 local function getArrow()
@@ -1177,13 +1203,29 @@ local function getArrow()
     f.Size = UDim2.new(0, 30, 0, 30)
     f.BackgroundTransparency = 1
     f.Font = Enum.Font.GothamBold; f.TextSize = 24
-    f.Text = "▶"; f.TextColor3 = ACCENT; f.Visible = false
-    f.Parent = arrowsContainer; table.insert(arrowPool, f)
+    f.Text = "▲"; f.TextColor3 = ACCENT; f.Visible = false
+    f.Parent = arrowRadar
+    table.insert(arrowPool, f)
     return f
 end
-findMod("Render", "Arrows").actions.onToggle = function(on) arrowsContainer.Visible = on end
 
--- === Nametags ===
+local arrowMod = findMod("Render", "Arrows")
+arrowMod.actions.onToggle = function(on) arrowRadar.Visible = on end
+arrowMod.actions.onSliderChange = function(idx, v)
+    if idx == 1 then
+        arrowRadarRing.Size = UDim2.new(0, v * 2, 0, v * 2)
+        arrowRadarRing2.Size = UDim2.new(0, v, 0, v)
+    elseif idx == 2 then
+        for _, a in ipairs(arrowPool) do
+            a.Size = UDim2.new(0, v, 0, v)
+            a.TextSize = v * 0.8
+        end
+    end
+end
+
+-- =========================================================
+-- NAMETAGS
+-- =========================================================
 local nametagFolder = Instance.new("Folder")
 nametagFolder.Name = "DesolateNameTags"; nametagFolder.Parent = hudGui
 local nametags = {}
@@ -1191,7 +1233,7 @@ local nametags = {}
 local function createNametag(plr)
     local bb = Instance.new("BillboardGui")
     bb.Name = "NT_" .. plr.Name
-    bb.Size = UDim2.new(0, 140, 0, 40)
+    bb.Size = UDim2.new(0, 140, 0, 44)
     bb.StudsOffset = Vector3.new(0, 3.2, 0)
     bb.AlwaysOnTop = true; bb.LightInfluence = 0
 
@@ -1216,7 +1258,7 @@ local function createNametag(plr)
     local hbBg = Instance.new("Frame")
     hbBg.Position = UDim2.new(0, 6, 1, -6)
     hbBg.Size = UDim2.new(1, -12, 0, 3)
-    hbBg.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    hbBg.BackgroundColor3 = BG4
     hbBg.BorderSizePixel = 0; hbBg.Parent = bg
     Instance.new("UICorner", hbBg).CornerRadius = UDim.new(0, 4)
 
@@ -1263,7 +1305,9 @@ Players.PlayerRemoving:Connect(function(plr)
     end
 end)
 
--- === ESP ===
+-- =========================================================
+-- ESP
+-- =========================================================
 local espHighlights = {}
 findMod("Render", "ESP").actions.onToggle = function(on)
     if on then
@@ -1284,7 +1328,9 @@ findMod("Render", "ESP").actions.onToggle = function(on)
     end
 end
 
--- === Jump Circle ===
+-- =========================================================
+-- JumpCircle / Trails / Particles
+-- =========================================================
 local jumpRings = {}
 findMod("Render", "JumpCircle").actions.onToggle = function(on)
     if not on then
@@ -1329,7 +1375,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- === Trails / Particles ===
 local trailAccum, particleAccum = 0, 0
 RunService.Heartbeat:Connect(function(dt)
     local char = player.Character
@@ -1382,7 +1427,9 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- === Custom Sky / Fog / Sky Preset ===
+-- =========================================================
+-- Sky / Fog
+-- =========================================================
 local SKY_PRESETS = {
     { name = "Day",        clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
     { name = "Sunset",     clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
@@ -1392,7 +1439,6 @@ local SKY_PRESETS = {
 }
 local currentSkyPreset = 4
 local customSkyObj = nil
-
 local originalLighting = {
     Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
     FogColor = Lighting.FogColor, FogStart = Lighting.FogStart, FogEnd = Lighting.FogEnd,
@@ -1447,8 +1493,7 @@ end
 local fogMod = findMod("Render", "Fog")
 fogMod.actions.onToggle = function(on)
     if on then
-        Lighting.FogStart = 0
-        Lighting.FogEnd = fogMod.slider.value
+        Lighting.FogStart = 0; Lighting.FogEnd = fogMod.slider.value
         if not skyMod.enabled then Lighting.FogColor = Color3.fromRGB(40, 45, 65) end
     else
         if not skyMod.enabled then
@@ -1486,26 +1531,18 @@ local chinaParts = {}
 local chinaPointLight = nil
 
 local function destroyChinaHat()
-    for _, p in ipairs(chinaParts) do
-        if p and p.Parent then p:Destroy() end
-    end
-    chinaParts = {}
-    chinaPointLight = nil
+    for _, p in ipairs(chinaParts) do if p and p.Parent then p:Destroy() end end
+    chinaParts = {}; chinaPointLight = nil
 end
 
 local function buildChinaHat()
     destroyChinaHat()
     local layers = {
-        { y = 0.00, r = 1.55, t = 0.10 },
-        { y = 0.07, r = 1.45, t = 0.10 },
-        { y = 0.14, r = 1.32, t = 0.10 },
-        { y = 0.21, r = 1.18, t = 0.10 },
-        { y = 0.28, r = 1.03, t = 0.10 },
-        { y = 0.35, r = 0.87, t = 0.10 },
-        { y = 0.42, r = 0.70, t = 0.10 },
-        { y = 0.49, r = 0.53, t = 0.10 },
-        { y = 0.56, r = 0.37, t = 0.10 },
-        { y = 0.63, r = 0.22, t = 0.10 },
+        { y = 0.00, r = 1.55, t = 0.10 }, { y = 0.07, r = 1.45, t = 0.10 },
+        { y = 0.14, r = 1.32, t = 0.10 }, { y = 0.21, r = 1.18, t = 0.10 },
+        { y = 0.28, r = 1.03, t = 0.10 }, { y = 0.35, r = 0.87, t = 0.10 },
+        { y = 0.42, r = 0.70, t = 0.10 }, { y = 0.49, r = 0.53, t = 0.10 },
+        { y = 0.56, r = 0.37, t = 0.10 }, { y = 0.63, r = 0.22, t = 0.10 },
         { y = 0.70, r = 0.10, t = 0.12 },
     }
     for _, layer in ipairs(layers) do
@@ -1514,19 +1551,14 @@ local function buildChinaHat()
         p.Material = Enum.Material.Neon
         p.Color = ACCENT
         p.Size = Vector3.new(layer.t, layer.r * 2, layer.r * 2)
-        p.CanCollide = false
-        p.CanQuery = false
-        p.CanTouch = false
-        p.Anchored = true
-        p.CastShadow = false
-        p.Massless = true
+        p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
+        p.Anchored = true; p.CastShadow = false; p.Massless = true
         p.Parent = Workspace
         table.insert(chinaParts, { part = p, offsetY = layer.y })
     end
     chinaPointLight = Instance.new("PointLight")
     chinaPointLight.Color = ACCENT
-    chinaPointLight.Brightness = 1
-    chinaPointLight.Range = 8
+    chinaPointLight.Brightness = 1; chinaPointLight.Range = 8
     chinaPointLight.Shadows = false
     chinaPointLight.Parent = chinaParts[#chinaParts].part
 end
@@ -1549,16 +1581,13 @@ RunService.Heartbeat:Connect(function()
     if not char then return end
     local head = char:FindFirstChild("Head")
     if not head then return end
-
     if not chinaParts[1] or not chinaParts[1].part.Parent then
         buildChinaHat(); return
     end
-
     local dist = chinaMod.sliders[2] and chinaMod.sliders[2].value or 1.6
     local t = tick()
     local baseCF = head.CFrame * CFrame.new(0, dist + math.sin(t * 2) * 0.06, 0)
         * CFrame.Angles(0, t * 0.8, math.rad(90))
-
     for _, entry in ipairs(chinaParts) do
         entry.part.CFrame = baseCF * CFrame.new(entry.offsetY, 0, 0)
         entry.part.Color = ACCENT
@@ -1566,7 +1595,7 @@ RunService.Heartbeat:Connect(function()
     if chinaPointLight then chinaPointLight.Color = ACCENT end
 end)
 
--- === Time Changer ===
+-- Time Changer / Damage Ind
 local timeMod = findMod("Render", "Time Changer")
 timeMod.actions.onToggle = function(on)
     if on then Lighting.ClockTime = timeMod.slider.value
@@ -1577,11 +1606,9 @@ timeMod.actions.onChange = function(v)
     Lighting.ClockTime = v
 end
 
--- === Damage Indicator ===
 local damageIndGui = Instance.new("ScreenGui")
 damageIndGui.Name = "DesolateDmg"
-damageIndGui.ResetOnSpawn = false
-damageIndGui.IgnoreGuiInset = true
+damageIndGui.ResetOnSpawn = false; damageIndGui.IgnoreGuiInset = true
 damageIndGui.DisplayOrder = 997
 if gethui then local ok, h = pcall(gethui); if ok and h then damageIndGui.Parent = h end end
 if not damageIndGui.Parent then
@@ -1591,7 +1618,6 @@ end
 
 local lastHealth = nil
 local healthConn = nil
-
 local function showDamageIndicator(dmg)
     local lbl = Instance.new("TextLabel")
     lbl.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1630,22 +1656,17 @@ findMod("Render", "Damage Ind").actions.onToggle = function(on)
     end
 end
 
--- === Target HUD ===
+-- =========================================================
+-- TARGET HUD
+-- =========================================================
 local targetHud = Instance.new("Frame")
 targetHud.Size = UDim2.new(0, 220, 0, 70)
 targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
 targetHud.BackgroundColor3 = BG2
 targetHud.BackgroundTransparency = 0.1
 targetHud.BorderSizePixel = 0
-targetHud.Visible = false
-targetHud.Parent = hudGui
+targetHud.Visible = false; targetHud.Parent = hudGui
 Instance.new("UICorner", targetHud).CornerRadius = UDim.new(0, 8)
-
-local thAccent = Instance.new("Frame")
-thAccent.Size = UDim2.new(0, 3, 1, 0)
-thAccent.BackgroundColor3 = ERROR
-thAccent.BorderSizePixel = 0; thAccent.Parent = targetHud
-Instance.new("UICorner", thAccent).CornerRadius = UDim.new(0, 8)
 
 local thName = Instance.new("TextLabel")
 thName.BackgroundTransparency = 1; thName.Position = UDim2.new(0, 10, 0, 4)
@@ -1664,7 +1685,7 @@ thInfo.Text = "HP: -- | --m"; thInfo.Parent = targetHud
 local thBarBg = Instance.new("Frame")
 thBarBg.Position = UDim2.new(0, 10, 1, -16)
 thBarBg.Size = UDim2.new(1, -20, 0, 6)
-thBarBg.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+thBarBg.BackgroundColor3 = BG4
 thBarBg.BorderSizePixel = 0; thBarBg.Parent = targetHud
 Instance.new("UICorner", thBarBg).CornerRadius = UDim.new(0, 6)
 
@@ -1693,7 +1714,7 @@ local function getTarget()
     return nil
 end
 
--- FPS counter
+-- FPS
 local fps = 0
 local frames = 0
 local t0 = tick()
@@ -1703,7 +1724,7 @@ RunService.RenderStepped:Connect(function()
     if now - t0 >= 1 then fps = frames; frames = 0; t0 = now end
 end)
 
--- Main update loop
+-- Main loop
 task.spawn(function()
     while gui.Parent do
         if findMod("Render", "Watermark").enabled then
@@ -1721,33 +1742,39 @@ task.spawn(function()
             end
         end
 
-        if findMod("Render", "Arrows").enabled then
+        -- Arrows (radar)
+        if arrowMod.enabled then
             for _, a in ipairs(arrowPool) do a.Visible = false end
-            local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            local radius = arrowMod.sliders[1].value
+            local size = arrowMod.sliders[2].value
+            local myChar = player.Character
+            local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
             if myHrp and Camera then
+                local camLook = Camera.CFrame.LookVector
+                local ff = Vector3.new(camLook.X, 0, camLook.Z)
+                if ff.Magnitude < 0.001 then ff = Vector3.new(0, 0, 1) end
+                ff = ff.Unit
+                local myPos = Camera.CFrame.Position
                 for _, plr in ipairs(Players:GetPlayers()) do
                     if plr ~= player and plr.Character then
                         local head = plr.Character:FindFirstChild("Head")
                         if head then
-                            local targetPos = head.Position
-                            local screenPos, onScreen = Camera:WorldToViewportPoint(targetPos)
-                            local arrow = getArrow(); arrow.Visible = true
-                            local myPos = Camera.CFrame.Position
-                            local dir = (targetPos - myPos).Unit
-                            local dot = dir:Dot(Camera.CFrame.LookVector)
-                            if onScreen and dot >= 0 and screenPos.Z > 0 then
-                                arrow.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y - 40)
-                                local angle = math.atan2(targetPos.Y - myPos.Y,
-                                    (Vector2.new(targetPos.X, targetPos.Z) - Vector2.new(myPos.X, myPos.Z)).Magnitude)
+                            local toT = head.Position - myPos
+                            local ft = Vector3.new(toT.X, 0, toT.Z)
+                            if ft.Magnitude > 0.5 then
+                                ft = ft.Unit
+                                local dot = ff:Dot(ft)
+                                local cross = ff:Cross(ft).Y
+                                local angle = math.acos(math.clamp(dot, -1, 1))
+                                if cross > 0 then angle = -angle end
+                                local arrow = getArrow()
+                                arrow.Visible = true
+                                arrow.Size = UDim2.new(0, size, 0, size)
+                                arrow.TextSize = size * 0.8
+                                arrow.TextColor3 = isSyncUser(plr) and SYNC_COLOR or ACCENT
+                                arrow.Position = UDim2.new(0.5, math.sin(angle) * radius,
+                                    0.5, -math.cos(angle) * radius)
                                 arrow.Rotation = math.deg(angle)
-                            else
-                                local vpSize = Camera.ViewportSize
-                                local rel = Camera.CFrame:PointToObjectSpace(targetPos)
-                                local angle = math.atan2(rel.Y, rel.X)
-                                local radius = math.min(vpSize.X, vpSize.Y) * 0.35
-                                arrow.Position = UDim2.new(0, vpSize.X / 2 + math.cos(angle) * radius,
-                                    0, vpSize.Y / 2 + math.sin(angle) * radius)
-                                arrow.Rotation = math.deg(angle) + 180
                             end
                         end
                     end
@@ -1755,6 +1782,7 @@ task.spawn(function()
             end
         end
 
+        -- NameTags
         if findMod("Render", "NameTags").enabled then
             for plr, data in pairs(nametags) do
                 if not plr or not plr.Parent then
@@ -1764,6 +1792,10 @@ task.spawn(function()
                     local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
                     if hum and hrp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                         local dist = (hrp.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                        local sync = isSyncUser(plr)
+                        local prefix = sync and "◆ " or ""
+                        data.name.Text = prefix .. plr.Name
+                        data.name.TextColor3 = sync and SYNC_COLOR or ACCENT
                         data.info.Text = string.format("HP: %d/%d | %dm", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(dist))
                         local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
                         data.hbar.Size = UDim2.new(pct, 0, 1, 0)
@@ -1774,6 +1806,7 @@ task.spawn(function()
             end
         end
 
+        -- ESP
         if findMod("Render", "ESP").enabled then
             for plr, hl in pairs(espHighlights) do
                 if not plr or not plr.Character or not plr.Character.Parent then
@@ -1783,18 +1816,28 @@ task.spawn(function()
                 end
             end
             for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= player and plr.Character and not espHighlights[plr] then
-                    local hl = Instance.new("Highlight")
-                    hl.Name = "DesolateESP"; hl.Adornee = plr.Character
-                    hl.FillColor = Color3.fromRGB(255, 60, 60); hl.OutlineColor = ACCENT
-                    hl.FillTransparency = 0.65; hl.OutlineTransparency = 0
-                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    hl.Parent = plr.Character
-                    espHighlights[plr] = hl
+                if plr ~= player and plr.Character then
+                    local hl = espHighlights[plr]
+                    if not hl then
+                        hl = Instance.new("Highlight")
+                        hl.Name = "DesolateESP"; hl.Adornee = plr.Character
+                        hl.FillTransparency = 0.65; hl.OutlineTransparency = 0
+                        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                        hl.Parent = plr.Character
+                        espHighlights[plr] = hl
+                    end
+                    if isSyncUser(plr) then
+                        hl.FillColor = SYNC_COLOR
+                        hl.OutlineColor = Color3.fromRGB(120, 255, 150)
+                    else
+                        hl.FillColor = Color3.fromRGB(255, 60, 60)
+                        hl.OutlineColor = ACCENT
+                    end
                 end
             end
         end
 
+        -- TargetHUD
         if findMod("HUD", "TargetHUD").enabled then
             local plr, hum = getTarget()
             if plr and hum then
@@ -1803,7 +1846,9 @@ task.spawn(function()
                 if hrp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                     dist = (hrp.Position - player.Character.HumanoidRootPart.Position).Magnitude
                 end
-                thName.Text = plr.Name
+                local sync = isSyncUser(plr)
+                thName.Text = (sync and "◆ " or "") .. plr.Name
+                thName.TextColor3 = sync and SYNC_COLOR or TEXT
                 thInfo.Text = string.format("HP: %d/%d | %dm", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(dist))
                 local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
                 thBar.Size = UDim2.new(pct, 0, 1, 0)
@@ -1819,7 +1864,7 @@ task.spawn(function()
     end
 end)
 
--- === Fullbright ===
+-- Fullbright
 findMod("Render", "Fullbright").actions.onToggle = function(on)
     if on then
         Lighting.Ambient = Color3.fromRGB(200, 200, 200)
@@ -1832,7 +1877,7 @@ findMod("Render", "Fullbright").actions.onToggle = function(on)
     end
 end
 
--- === Player ===
+-- Player
 local wsMod = findMod("Player", "WalkSpeed")
 local jpMod = findMod("Player", "JumpPower")
 RunService.Heartbeat:Connect(function()
@@ -1911,7 +1956,7 @@ fovMod.actions.onChange = function(v)
     Camera.FieldOfView = v
 end
 
--- === Kill Effect ===
+-- Kill Effect
 local killGui = Instance.new("ScreenGui")
 killGui.Name = "DesolateKill"
 killGui.ResetOnSpawn = false; killGui.IgnoreGuiInset = true
@@ -1950,212 +1995,4 @@ Players.PlayerAdded:Connect(function(plr)
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if not myHrp or not hrp then return end
             if (myHrp.Position - hrp.Position).Magnitude < 60 then
-                showKillEffect(plr.Name)
-            end
-        end)
-    end)
-end)
-
--- === Misc ===
-findMod("Misc", "AntiAFK").actions.onToggle = function(on)
-    if on then
-        if not _G.Desolate_AntiAFK then
-            _G.Desolate_AntiAFK = player.Idled:Connect(function()
-                pcall(function()
-                    VirtualUser:CaptureController()
-                    VirtualUser:ClickButton2(Vector2.new())
-                end)
-            end)
-        end
-    else
-        if _G.Desolate_AntiAFK then _G.Desolate_AntiAFK:Disconnect(); _G.Desolate_AntiAFK = nil end
-    end
-end
-
-findMod("Misc", "Noclip").actions.onToggle = function(on)
-    if on then
-        if _G.Desolate_Noclip then _G.Desolate_Noclip:Disconnect() end
-        _G.Desolate_Noclip = RunService.Stepped:Connect(function()
-            local char = player.Character
-            if not char then return end
-            for _, p in ipairs(char:GetDescendants()) do
-                if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
-            end
-        end)
-    else
-        if _G.Desolate_Noclip then _G.Desolate_Noclip:Disconnect(); _G.Desolate_Noclip = nil end
-        local char = player.Character
-        if char then
-            for _, p in ipairs(char:GetDescendants()) do
-                if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-                    pcall(function() p.CanCollide = true end)
-                end
-            end
-        end
-    end
-end
-
-findMod("Misc", "AutoClicker").actions.onToggle = function(on) end
-RunService.Heartbeat:Connect(function()
-    if not findMod("Misc", "AutoClicker").enabled then return end
-    local cps = findMod("Misc", "AutoClicker").slider.value
-    local interval = 1 / math.max(cps, 1)
-    if math.random() < math.min(interval, 1) then
-        pcall(function()
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton1(Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2))
-        end)
-    end
-end)
-
-findMod("Misc", "ServerHop").actions.onToggle = function(on)
-    if not on then return end
-    task.spawn(function()
-        local placeId = game.PlaceId
-        local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
-        local ok, body = pcall(function() return game:HttpGet(url) end)
-        if not ok or not body then findMod("Misc", "ServerHop").enabled = false; return end
-        local data = HttpService:JSONDecode(body)
-        if data and data.data then
-            for _, srv in ipairs(data.data) do
-                if srv.playing < srv.maxPlayers and srv.id ~= game.JobId then
-                    pcall(function()
-                        TeleportService:TeleportToPlaceInstance(placeId, srv.id, player)
-                    end)
-                    break
-                end
-            end
-        end
-        findMod("Misc", "ServerHop").enabled = false
-    end)
-end
-
-findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
-    if not on then return end
-    for _, f in ipairs({
-        "desolate_hud_watermark.txt", "desolate_hud_fps.txt",
-        "desolate_hud_coords.txt", "desolate_hud_targethud.txt",
-    }) do
-        pcall(function() if isfile(f) then delfile(f) end end)
-    end
-    watermark.Position = UDim2.new(0, 10, 0, 10)
-    coordFrame.Position = UDim2.new(0, 10, 0, 60)
-    targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
-    task.spawn(function()
-        task.wait(0.3); findMod("Misc", "Reset HUD Pos").enabled = false; refreshModules()
-    end)
-end
-
--- =========================================================
--- APPLY LOADED MODULES
--- =========================================================
-function applyLoadedModules()
-    for cat, list in pairs(state) do
-        for _, mod in ipairs(list) do
-            if not mod.isHeader and mod.actions.onToggle then
-                pcall(mod.actions.onToggle, mod.enabled)
-            end
-        end
-    end
-end
-
--- =========================================================
--- DRAG MAIN + MOBILE + OPEN KEY
--- =========================================================
-do
-    local dragging, dragStart, startPos
-    header.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-           or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; dragStart = input.Position; startPos = main.Position
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-           or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            if subMenu.Visible then subMenu.Position = main.Position end
-        end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-           or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
-    end)
-end
-
-local mobileBtn = Instance.new("TextButton")
-mobileBtn.Size = UDim2.new(0, 44, 0, 44)
-mobileBtn.Position = UDim2.new(0, 10, 0.5, -22)
-mobileBtn.BackgroundColor3 = BG2; mobileBtn.TextColor3 = ACCENT
-mobileBtn.Font = FONT; mobileBtn.TextSize = 16; mobileBtn.Text = "D"
-mobileBtn.BorderSizePixel = 0; mobileBtn.Parent = gui
-Instance.new("UICorner", mobileBtn).CornerRadius = UDim.new(0, 22)
-local mStroke = Instance.new("UIStroke")
-mStroke.Color = ACCENT; mStroke.Thickness = 1; mStroke.Transparency = 0.4
-mStroke.Parent = mobileBtn
-
-mobileBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
-main:GetPropertyChangedSignal("Visible"):Connect(function()
-    mobileBtn.Visible = not main.Visible
-end)
-
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
-    if input.KeyCode == OPEN_KEY then main.Visible = not main.Visible end
-end)
-
--- =========================================================
--- INIT
--- =========================================================
-loadConfig()
-refreshCategories()
-refreshModules()
-
-if currentTheme ~= "Dark" then
-    local th = THEMES[currentTheme]
-    if th then
-        local replacements = {
-            { from = ACCENT, to = th.accent }, { from = BG, to = th.bg },
-            { from = BG2, to = th.bg2 }, { from = BG3, to = th.bg3 }, { from = BG4, to = th.bg4 },
-            { from = TEXT, to = th.text }, { from = MUTED, to = th.muted },
-        }
-        local function findReplacement(c)
-            for _, r in ipairs(replacements) do
-                if colorsClose(r.from, c) then return r.to end
-            end
-            return nil
-        end
-        local function recolor(obj)
-            if obj:IsA("GuiObject") then
-                local nr = findReplacement(obj.BackgroundColor3)
-                if nr then obj.BackgroundColor3 = nr end
-            end
-            if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-                local nr = findReplacement(obj.TextColor3)
-                if nr then obj.TextColor3 = nr end
-            end
-            if obj:IsA("UIStroke") then
-                local nr = findReplacement(obj.Color)
-                if nr then obj.Color = nr end
-            end
-            if obj:IsA("ImageLabel") and obj.BackgroundColor3 then
-                local nr = findReplacement(obj.BackgroundColor3)
-                if nr then obj.BackgroundColor3 = nr end
-            end
-            for _, c in ipairs(obj:GetChildren()) do recolor(c) end
-        end
-        recolor(gui); recolor(subGui); recolor(hudGui); recolor(damageIndGui); recolor(killGui)
-        ACCENT = th.accent; BG = th.bg; BG2 = th.bg2; BG3 = th.bg3; BG4 = th.bg4
-        TEXT = th.text; MUTED = th.muted
-        refreshCategories(); refreshModules()
-    end
-end
-
-applyLoadedModules()
-
-watermark.Visible = findMod("Render", "Watermark").enabled
-crosshair.Visible = findMod("HUD", "Crosshair").enabled
-
-print("[Desolate] v" .. VERSION .. " loaded · " .. player.Name)
+               
