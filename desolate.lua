@@ -1,10 +1,10 @@
 --[[
-    Desolate Client — v4.1.1
-    Xeno v1.3.60+ | loadstring(request({...}).Body)()
-    Changes: убраны кольца ArrowRadar
+    Desolate Client — v4.1.2
+    Xeno | loadstring(game:HttpGet("https://cdn.jsdelivr.net/..."))()
+    Changes: Arrows удалены полностью
 ]]
 
-local VERSION = "4.1.1"
+local VERSION = "4.1.2"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -24,7 +24,6 @@ local Camera           = Workspace.CurrentCamera
 
 local player = Players.LocalPlayer
 
--- === HWID ===
 local function getHwid()
     if gethwid then
         local ok, id = pcall(gethwid)
@@ -43,7 +42,6 @@ local function getHwid()
     return id
 end
 
--- === FS ===
 local fs = {
     available = (type(writefile) == "function")
         and (type(readfile) == "function")
@@ -67,7 +65,6 @@ function fs.delete(path)
     return pcall(delfile, path)
 end
 
--- === HTTP ===
 local function httpPost(url, body)
     local payload = HttpService:JSONEncode(body)
     if request then
@@ -102,7 +99,6 @@ local function validateKey(key)
     return true, data
 end
 
--- === Auth UI ===
 local function showKeyUI(opts)
     local ACCENT = Color3.fromRGB(0, 200, 230)
     local BG, BG2 = Color3.fromRGB(6, 6, 10), Color3.fromRGB(14, 14, 20)
@@ -197,9 +193,6 @@ local function requireAuth()
 end
 if not requireAuth() then return end
 
--- =========================================================
--- THEMES
--- =========================================================
 local THEMES = {
     Dark = {
         accent = Color3.fromRGB(0, 200, 230),
@@ -259,9 +252,6 @@ local FONT = Enum.Font.Code
 local OPEN_KEY = Enum.KeyCode.RightShift
 local currentTheme = "Dark"
 
--- =========================================================
--- MODULE STATE
--- =========================================================
 local state = {
     Render = {
         { name = "Visuals",          isHeader = true },
@@ -280,11 +270,6 @@ local state = {
         { name = "Show Desolate Users", enabled = false, actions = {} },
         { name = "NameTags",     enabled = false, actions = {} },
         { name = "ESP",          enabled = false, actions = {} },
-        { name = "Arrows",       enabled = false, actions = {},
-          sliders = {
-            { label = "Distance", min = 30, max = 300, value = 100 },
-            { label = "Size",     min = 10, max = 60,  value = 24 },
-          } },
 
         { name = "Effects",          isHeader = true },
         { name = "JumpCircle",   enabled = false, actions = {} },
@@ -340,9 +325,7 @@ local function findMod(cat, name)
     return nil
 end
 
--- =========================================================
 -- SYNC
--- =========================================================
 local syncSet = {}
 local syncMod = findMod("Render", "Show Desolate Users")
 
@@ -391,9 +374,6 @@ local function isSyncUser(plr)
     return syncSet[tostring(plr.UserId)] == true
 end
 
--- =========================================================
--- CONFIG
--- =========================================================
 local function saveConfig()
     local data = { version = VERSION, theme = currentTheme, modules = {} }
     for cat, list in pairs(state) do
@@ -455,9 +435,6 @@ local function resetConfig()
     end
 end
 
--- =========================================================
--- GUI ROOT
--- =========================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "Desolate_" .. math.random(1, 1e6)
 gui.ResetOnSpawn = false; gui.IgnoreGuiInset = true; gui.DisplayOrder = 999
@@ -564,7 +541,6 @@ local modList = Instance.new("UIListLayout")
 modList.Padding = UDim.new(0, 6); modList.SortOrder = Enum.SortOrder.LayoutOrder
 modList.Parent = modScroll
 
--- PROFILE
 local profileBtn = Instance.new("TextButton")
 profileBtn.Size = UDim2.new(0, 120, 0, 74)
 profileBtn.Position = UDim2.new(0, 8, 1, -82)
@@ -637,9 +613,6 @@ end
 updateProfilePlan()
 task.spawn(function() while gui.Parent do updateProfilePlan(); task.wait(60) end end)
 
--- =========================================================
--- MODULE LIST
--- =========================================================
 local currentCat = "Render"
 
 local function refreshModules()
@@ -787,9 +760,6 @@ local function refreshCategories()
     end
 end
 
--- =========================================================
--- SUB MENU
--- =========================================================
 local subGui = Instance.new("ScreenGui")
 subGui.Name = "DesolateSub_" .. math.random(1, 1e6)
 subGui.ResetOnSpawn = false; subGui.IgnoreGuiInset = true
@@ -934,9 +904,6 @@ settingsNote.TextWrapped = true
 settingsNote.Text = "• RightShift / кнопка D — открыть/закрыть\n• 💾 сохранить · 📂 загрузить · ↺ сброс\n• HUD тягается мышью за любой элемент\n• Автосохранение при закрытии"
 settingsNote.Parent = subBody
 
--- =========================================================
--- THEME APPLY
--- =========================================================
 local function applyStaticColors()
     main.BackgroundColor3 = BG
     stroke.Color = ACCENT
@@ -975,7 +942,6 @@ local function applyStaticColors()
     for _, b in ipairs(headerBtns) do
         b.BackgroundColor3 = BG4; b.TextColor3 = TEXT
     end
-    for _, a in ipairs(arrowPool) do a.TextColor3 = ACCENT end
 end
 
 function applyTheme(themeName)
@@ -1005,9 +971,6 @@ main:GetPropertyChangedSignal("Visible"):Connect(function()
     if not main.Visible then subMenu.Visible = false end
 end)
 
--- =========================================================
--- HUD LAYER
--- =========================================================
 local hudGui = Instance.new("ScreenGui")
 hudGui.Name = "DesolateHUD_" .. math.random(1, 1e6)
 hudGui.ResetOnSpawn = false; hudGui.IgnoreGuiInset = true
@@ -1142,45 +1105,6 @@ end
 buildCrosshair()
 findMod("HUD", "Crosshair").actions.onToggle = function(on) crosshair.Visible = on end
 
--- =========================================================
--- ARROWS (без колец)
--- =========================================================
-local arrowRadar = Instance.new("Frame")
-arrowRadar.Name = "ArrowRadar"
-arrowRadar.AnchorPoint = Vector2.new(0.5, 0.5)
-arrowRadar.Position = UDim2.new(0.5, 0, 0.5, 0)
-arrowRadar.Size = UDim2.new(0, 1, 0, 1)
-arrowRadar.BackgroundTransparency = 1
-arrowRadar.Visible = false; arrowRadar.Parent = hudGui
-
-local arrowPool = {}
-local function getArrow()
-    for _, a in ipairs(arrowPool) do if not a.Visible then return a end end
-    local f = Instance.new("TextLabel")
-    f.AnchorPoint = Vector2.new(0.5, 0.5)
-    f.Size = UDim2.new(0, 30, 0, 30)
-    f.BackgroundTransparency = 1
-    f.Font = Enum.Font.GothamBold; f.TextSize = 24
-    f.Text = "▲"; f.TextColor3 = ACCENT; f.Visible = false
-    f.Parent = arrowRadar
-    table.insert(arrowPool, f)
-    return f
-end
-
-local arrowMod = findMod("Render", "Arrows")
-arrowMod.actions.onToggle = function(on) arrowRadar.Visible = on end
-arrowMod.actions.onSliderChange = function(idx, v)
-    if idx == 2 then
-        for _, a in ipairs(arrowPool) do
-            a.Size = UDim2.new(0, v, 0, v)
-            a.TextSize = v * 0.8
-        end
-    end
-end
-
--- =========================================================
--- NAMETAGS
--- =========================================================
 local nametagFolder = Instance.new("Folder")
 nametagFolder.Name = "DesolateNameTags"; nametagFolder.Parent = hudGui
 local nametags = {}
@@ -1260,7 +1184,6 @@ Players.PlayerRemoving:Connect(function(plr)
     end
 end)
 
--- ESP
 local espHighlights = {}
 findMod("Render", "ESP").actions.onToggle = function(on)
     if on then
@@ -1281,7 +1204,6 @@ findMod("Render", "ESP").actions.onToggle = function(on)
     end
 end
 
--- JumpCircle
 local jumpRings = {}
 findMod("Render", "JumpCircle").actions.onToggle = function(on)
     if not on then
@@ -1326,7 +1248,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Trails / Particles
 local trailAccum, particleAccum = 0, 0
 RunService.Heartbeat:Connect(function(dt)
     local char = player.Character
@@ -1379,7 +1300,6 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- Sky / Fog
 local SKY_PRESETS = {
     { name = "Day",        clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
     { name = "Sunset",     clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
@@ -1474,7 +1394,6 @@ presetMod.actions.onChange = function(v)
     Lighting.ClockTime = skyMod.slider.value
 end
 
--- China Hat
 local chinaParts = {}
 local chinaPointLight = nil
 
@@ -1543,7 +1462,6 @@ RunService.Heartbeat:Connect(function()
     if chinaPointLight then chinaPointLight.Color = ACCENT end
 end)
 
--- Time Changer
 local timeMod = findMod("Render", "Time Changer")
 timeMod.actions.onToggle = function(on)
     if on then Lighting.ClockTime = timeMod.slider.value
@@ -1554,7 +1472,6 @@ timeMod.actions.onChange = function(v)
     Lighting.ClockTime = v
 end
 
--- Damage Ind
 local damageIndGui = Instance.new("ScreenGui")
 damageIndGui.Name = "DesolateDmg"
 damageIndGui.ResetOnSpawn = false; damageIndGui.IgnoreGuiInset = true
@@ -1605,7 +1522,6 @@ findMod("Render", "Damage Ind").actions.onToggle = function(on)
     end
 end
 
--- Target HUD
 local targetHud = Instance.new("Frame")
 targetHud.Size = UDim2.new(0, 220, 0, 70)
 targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
@@ -1661,7 +1577,6 @@ local function getTarget()
     return nil
 end
 
--- FPS
 local fps = 0
 local frames = 0
 local t0 = tick()
@@ -1671,7 +1586,6 @@ RunService.RenderStepped:Connect(function()
     if now - t0 >= 1 then fps = frames; frames = 0; t0 = now end
 end)
 
--- Main loop
 task.spawn(function()
     while gui.Parent do
         if findMod("Render", "Watermark").enabled then
@@ -1686,45 +1600,6 @@ task.spawn(function()
             if hrp then
                 coordLabel.Text = string.format("X: %.1f Y: %.1f Z: %.1f",
                     hrp.Position.X, hrp.Position.Y, hrp.Position.Z)
-            end
-        end
-
-        if arrowMod.enabled then
-            for _, a in ipairs(arrowPool) do a.Visible = false end
-            local radius = arrowMod.sliders[1].value
-            local size = arrowMod.sliders[2].value
-            local myChar = player.Character
-            local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-            if myHrp and Camera then
-                local camLook = Camera.CFrame.LookVector
-                local ff = Vector3.new(camLook.X, 0, camLook.Z)
-                if ff.Magnitude < 0.001 then ff = Vector3.new(0, 0, 1) end
-                ff = ff.Unit
-                local myPos = Camera.CFrame.Position
-                for _, plr in ipairs(Players:GetPlayers()) do
-                    if plr ~= player and plr.Character then
-                        local head = plr.Character:FindFirstChild("Head")
-                        if head then
-                            local toT = head.Position - myPos
-                            local ft = Vector3.new(toT.X, 0, toT.Z)
-                            if ft.Magnitude > 0.5 then
-                                ft = ft.Unit
-                                local dot = ff:Dot(ft)
-                                local cross = ff:Cross(ft).Y
-                                local angle = math.acos(math.clamp(dot, -1, 1))
-                                if cross > 0 then angle = -angle end
-                                local arrow = getArrow()
-                                arrow.Visible = true
-                                arrow.Size = UDim2.new(0, size, 0, size)
-                                arrow.TextSize = size * 0.8
-                                arrow.TextColor3 = isSyncUser(plr) and SYNC_COLOR or ACCENT
-                                arrow.Position = UDim2.new(0.5, math.sin(angle) * radius,
-                                    0.5, -math.cos(angle) * radius)
-                                arrow.Rotation = math.deg(angle)
-                            end
-                        end
-                    end
-                end
             end
         end
 
@@ -1807,7 +1682,6 @@ task.spawn(function()
     end
 end)
 
--- Fullbright
 findMod("Render", "Fullbright").actions.onToggle = function(on)
     if on then
         Lighting.Ambient = Color3.fromRGB(200, 200, 200)
@@ -1820,7 +1694,6 @@ findMod("Render", "Fullbright").actions.onToggle = function(on)
     end
 end
 
--- Player
 local wsMod = findMod("Player", "WalkSpeed")
 local jpMod = findMod("Player", "JumpPower")
 RunService.Heartbeat:Connect(function()
@@ -1899,7 +1772,6 @@ fovMod.actions.onChange = function(v)
     Camera.FieldOfView = v
 end
 
--- Kill Effect
 local killGui = Instance.new("ScreenGui")
 killGui.Name = "DesolateKill"
 killGui.ResetOnSpawn = false; killGui.IgnoreGuiInset = true
@@ -1944,7 +1816,6 @@ Players.PlayerAdded:Connect(function(plr)
     end)
 end)
 
--- Misc
 findMod("Misc", "AntiAFK").actions.onToggle = function(on)
     if on then
         if not _G.Desolate_AntiAFK then
@@ -2032,9 +1903,8 @@ findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
     task.spawn(function()
         task.wait(0.3); findMod("Misc", "Reset HUD Pos").enabled = false; refreshModules()
     end)
-end)
+end
 
--- Apply
 function applyLoadedModules()
     for cat, list in pairs(state) do
         for _, mod in ipairs(list) do
@@ -2045,7 +1915,6 @@ function applyLoadedModules()
     end
 end
 
--- Drag + mobile + open key
 do
     local dragging, dragStart, startPos
     header.InputBegan:Connect(function(input)
@@ -2090,7 +1959,6 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if input.KeyCode == OPEN_KEY then main.Visible = not main.Visible end
 end)
 
--- INIT
 loadConfig()
 refreshCategories()
 refreshModules()
