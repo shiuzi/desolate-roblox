@@ -1,9 +1,10 @@
 --[[
-    Desolate Client — v2.0.0
+    Desolate Client — v2.1.0
     Xeno v1.3.60+ | loadstring(game:HttpGet("URL"))()
+    New: Noclip + перетаскивание HUD с сохранением
 ]]
 
-local VERSION = "2.0.0"
+local VERSION = "2.1.0"
 
 -- =========================================================
 -- AUTH CONFIG
@@ -105,7 +106,7 @@ local function validateKey(key)
     return true, data
 end
 
--- === UI активации (сокращённый) ===
+-- === UI активации ===
 local function showKeyUI(opts)
     local ACCENT = Color3.fromRGB(0, 224, 255)
     local BG, BG2 = Color3.fromRGB(14, 14, 18), Color3.fromRGB(24, 24, 30)
@@ -234,10 +235,12 @@ local state = {
         { name = "Crosshair",   enabled = true,  actions = {} },
     },
     Misc = {
-        { name = "AntiAFK",     enabled = false, actions = {} },
-        { name = "AutoClicker", enabled = false, actions = {},
+        { name = "AntiAFK",       enabled = false, actions = {} },
+        { name = "Noclip",        enabled = false, actions = {} },
+        { name = "AutoClicker",   enabled = false, actions = {},
           slider = { min = 1, max = 20, value = 8 } },
-        { name = "ServerHop",   enabled = false, actions = {} },
+        { name = "ServerHop",     enabled = false, actions = {} },
+        { name = "Reset HUD Pos", enabled = false, actions = {} },
     },
     Player = {
         { name = "WalkSpeed", enabled = false, actions = {},
@@ -461,7 +464,7 @@ local function refreshCategories()
 end
 
 -- =========================================================
--- HUD LAYER (отдельный ScreenGui для 2D оверлеев)
+-- HUD LAYER
 -- =========================================================
 local hudGui = Instance.new("ScreenGui")
 hudGui.Name = "DesolateHUD_" .. math.random(1, 1e6)
@@ -474,6 +477,78 @@ end
 if not hudGui.Parent then
     local ok = pcall(function() hudGui.Parent = game:GetService("CoreGui") end)
     if not ok or not hudGui.Parent then hudGui.Parent = player:WaitForChild("PlayerGui") end
+end
+
+-- =========================================================
+-- HUD DRAG HELPER
+-- =========================================================
+local function makeDraggable(frame, name, defaultX, defaultY)
+    frame.Active = true
+
+    local dragging, dragStart, startPos
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            local s = frame:FindFirstChildOfClass("UIStroke")
+            if s then s.Transparency = 0 end
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+           or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then
+                dragging = false
+                local s = frame:FindFirstChildOfClass("UIStroke")
+                if s then s.Transparency = 0.75 end
+                pcall(function()
+                    fs.write("desolate_hud_" .. name .. ".txt",
+                        frame.Position.X.Scale .. "," ..
+                        frame.Position.X.Offset .. "," ..
+                        frame.Position.Y.Scale .. "," ..
+                        frame.Position.Y.Offset)
+                end)
+            end
+        end
+    end)
+
+    -- Восстановить позицию
+    local saved = fs.read("desolate_hud_" .. name .. ".txt")
+    local loaded = false
+    if saved then
+        local nums = {}
+        for v in saved:gmatch("([^,]+)") do
+            table.insert(nums, tonumber(v))
+        end
+        if #nums >= 4 then
+            frame.Position = UDim2.new(nums[1], nums[2], nums[3], nums[4])
+            loaded = true
+        end
+    end
+    if not loaded and defaultX and defaultY then
+        frame.Position = UDim2.new(0, defaultX, 0, defaultY)
+    end
+
+    -- Подсветка-хинт что двигается
+    local hint = Instance.new("UIStroke")
+    hint.Color = ACCENT
+    hint.Thickness = 1
+    hint.Transparency = 0.75
+    hint.Parent = frame
 end
 
 -- =========================================================
@@ -498,6 +573,7 @@ wLabel.Text = "Desolate"; wLabel.Parent = watermark
 
 state.Render[1].actions.onToggle = function(on) watermark.Visible = on end
 watermark.Visible = state.Render[1].enabled
+makeDraggable(watermark, "watermark", 10, 10)
 
 -- =========================================================
 -- FPS COUNTER
@@ -515,6 +591,7 @@ fpsLabel.TextXAlignment = Enum.TextXAlignment.Left; fpsLabel.TextColor3 = TEXT
 fpsLabel.Text = "FPS: --"; fpsLabel.Parent = fpsFrame
 
 state.HUD[1].actions.onToggle = function(on) fpsFrame.Visible = on end
+makeDraggable(fpsFrame, "fps", 10, 60)
 
 -- =========================================================
 -- COORDINATES
@@ -533,6 +610,7 @@ coordLabel.TextColor3 = TEXT; coordLabel.Text = "X: -- Y: -- Z: --"
 coordLabel.Parent = coordFrame
 
 state.HUD[2].actions.onToggle = function(on) coordFrame.Visible = on end
+makeDraggable(coordFrame, "coords", 10, 90)
 
 -- =========================================================
 -- CROSSHAIR
@@ -546,7 +624,7 @@ crosshair.BackgroundTransparency = 1
 crosshair.Visible = true
 crosshair.Parent = hudGui
 
-local chMode = "circle"  -- "circle" | "dot" | "cross"
+local chMode = "circle"
 
 local function buildCrosshair()
     for _, c in ipairs(crosshair:GetChildren()) do c:Destroy() end
@@ -563,8 +641,8 @@ local function buildCrosshair()
         c.Position = UDim2.new(0.5, -7, 0.5, -7)
         c.BackgroundTransparency = 1
         c.Parent = crosshair
-        local stroke = Instance.new("UIStroke")
-        stroke.Color = ACCENT; stroke.Thickness = 1.5; stroke.Parent = c
+        local stroke2 = Instance.new("UIStroke")
+        stroke2.Color = ACCENT; stroke2.Thickness = 1.5; stroke2.Parent = c
         Instance.new("UICorner", c).CornerRadius = UDim.new(0, 999)
     elseif chMode == "cross" then
         for _, data in ipairs({
@@ -585,7 +663,7 @@ buildCrosshair()
 state.HUD[4].actions.onToggle = function(on) crosshair.Visible = on end
 
 -- =========================================================
--- ARROWS (2D стрелки к игрокам)
+-- ARROWS
 -- =========================================================
 local arrowsContainer = Instance.new("Frame")
 arrowsContainer.Size = UDim2.new(1, 0, 1, 0)
@@ -715,7 +793,7 @@ Players.PlayerRemoving:Connect(function(plr)
 end)
 
 -- =========================================================
--- ESP (Highlight)
+-- ESP
 -- =========================================================
 local espHighlights = {}
 
@@ -768,7 +846,6 @@ RunService.Heartbeat:Connect(function()
 
     local onGround = hum.FloorMaterial ~= Enum.Material.Air
     if wasOnGround and not onGround then
-        -- создаём кольцо
         local ring = Instance.new("Part")
         ring.Shape = Enum.PartType.Cylinder
         ring.Anchored = true
@@ -781,12 +858,10 @@ RunService.Heartbeat:Connect(function()
         ring.Size = Vector3.new(0.15, 2, 2)
         ring.CFrame = CFrame.new(hrp.Position - Vector3.new(0, 2.9, 0)) * CFrame.Angles(0, 0, math.rad(90))
         ring.Parent = Workspace
-
         table.insert(jumpRings, { part = ring, born = tick(), pos = hrp.Position })
     end
     wasOnGround = onGround
 
-    -- анимация колец
     for i = #jumpRings, 1, -1 do
         local r = jumpRings[i]
         local age = tick() - r.born
@@ -813,7 +888,7 @@ RunService.Heartbeat:Connect(function(dt)
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    if state.Render[7].enabled then  -- Trails
+    if state.Render[7].enabled then
         trailAccum += dt
         if trailAccum >= 0.05 then
             trailAccum = 0
@@ -840,7 +915,7 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    if state.Render[8].enabled then  -- Particles (вокруг игрока)
+    if state.Render[8].enabled then
         particleAccum += dt
         if particleAccum >= 0.1 then
             particleAccum = 0
@@ -855,8 +930,7 @@ RunService.Heartbeat:Connect(function(dt)
             local angle = math.random() * math.pi * 2
             local r = 2
             p.CFrame = CFrame.new(
-                hrp.Position + Vector3.new(math.cos(angle) * r, -1 + math.random() * 0.5, math.sin(angle) * r)
-            )
+                hrp.Position + Vector3.new(math.cos(angle) * r, -1 + math.random() * 0.5, math.sin(angle) * r))
             p.Parent = Workspace
             TweenService:Create(p, TweenInfo.new(1), {
                 Transparency = 1, Size = Vector3.new(0.05, 0.05, 0.05)
@@ -913,6 +987,7 @@ thBar.BorderSizePixel = 0; thBar.Parent = thBarBg
 Instance.new("UICorner", thBar).CornerRadius = UDim.new(0, 6)
 
 state.HUD[3].actions.onToggle = function(on) targetHud.Visible = on end
+makeDraggable(targetHud, "targethud")
 
 local function getTarget()
     local params = RaycastParams.new()
@@ -995,7 +1070,6 @@ task.spawn(function()
                             local behind = dot < 0
 
                             if onScreen and not behind and screenPos.Z > 0 then
-                                local vpSize = Camera.ViewportSize
                                 arrow.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y - 40)
                                 local angle = math.atan2(
                                     targetPos.Y - Camera.CFrame.Position.Y,
@@ -1003,7 +1077,6 @@ task.spawn(function()
                                 )
                                 arrow.Rotation = math.deg(angle)
                             else
-                                -- цель за спиной — стрелка по краю экрана
                                 local vpSize = Camera.ViewportSize
                                 local rel = Camera.CFrame:PointToObjectSpace(targetPos)
                                 local angle = math.atan2(rel.Y, rel.X)
@@ -1100,7 +1173,6 @@ end)
 -- =========================================================
 -- PLAYER ACTIONS
 -- =========================================================
--- WalkSpeed / JumpPower
 RunService.Heartbeat:Connect(function()
     local char = player.Character
     if not char then return end
@@ -1167,14 +1239,9 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Reach (увеличивает радиус взаимодействия)
-local oldReach = nil
+-- Reach
 state.Player[5].actions.onChange = function(v)
     if not state.Player[5].enabled then return end
-    -- Trick: увеличить touch interest через свойство, доступное в некоторых сборках
-    -- В общем случае — увеличиваем величину WorkSpace.FallHeightEnabled? Нет — используем клиентский хак через CustomPhysicalProperties нет.
-    -- Прямого API нет, работает только если executor патчит клиент.
-    -- Здесь мы меняем поле, если оно есть
     pcall(function() player.Reach = v end)
 end
 state.Player[5].actions.onToggle = function(on)
@@ -1188,7 +1255,7 @@ end
 -- =========================================================
 -- MISC ACTIONS
 -- =========================================================
--- AntiAFK
+-- [1] AntiAFK
 state.Misc[1].actions.onToggle = function(on)
     if on then
         if not _G.Desolate_AntiAFK then
@@ -1204,14 +1271,41 @@ state.Misc[1].actions.onToggle = function(on)
     end
 end
 
--- AutoClicker
-state.Misc[2].actions.onToggle = function(on) end
+-- [2] Noclip
+state.Misc[2].actions.onToggle = function(on)
+    if on then
+        if _G.Desolate_Noclip then _G.Desolate_Noclip:Disconnect() end
+        _G.Desolate_Noclip = RunService.Stepped:Connect(function()
+            local char = player.Character
+            if not char then return end
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") and p.CanCollide then
+                    p.CanCollide = false
+                end
+            end
+        end)
+    else
+        if _G.Desolate_Noclip then
+            _G.Desolate_Noclip:Disconnect()
+            _G.Desolate_Noclip = nil
+        end
+        local char = player.Character
+        if char then
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+                    pcall(function() p.CanCollide = true end)
+                end
+            end
+        end
+    end
+end
+
+-- [3] AutoClicker
+state.Misc[3].actions.onToggle = function(on) end
 RunService.Heartbeat:Connect(function()
-    if not state.Misc[2].enabled then return end
-    local cps = state.Misc[2].slider.value
-    -- CPS → кликов в секунду. Запускаем с частотой
+    if not state.Misc[3].enabled then return end
+    local cps = state.Misc[3].slider.value
     local interval = 1 / math.max(cps, 1)
-    -- Ограничим чтобы не лагало
     if math.random() < math.min(interval, 1) then
         pcall(function()
             VirtualUser:CaptureController()
@@ -1220,15 +1314,15 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ServerHop
-state.Misc[3].actions.onToggle = function(on)
+-- [4] ServerHop
+state.Misc[4].actions.onToggle = function(on)
     if not on then return end
     task.spawn(function()
         local placeId = game.PlaceId
         local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
         local ok, body = pcall(function() return game:HttpGet(url) end)
         if not ok or not body then
-            state.Misc[3].enabled = false
+            state.Misc[4].enabled = false
             return
         end
         local data = HttpService:JSONDecode(body)
@@ -1242,12 +1336,35 @@ state.Misc[3].actions.onToggle = function(on)
                 end
             end
         end
-        state.Misc[3].enabled = false
+        state.Misc[4].enabled = false
+    end)
+end
+
+-- [5] Reset HUD Pos
+state.Misc[5].actions.onToggle = function(on)
+    if not on then return end
+    local files = {
+        "desolate_hud_watermark.txt",
+        "desolate_hud_fps.txt",
+        "desolate_hud_coords.txt",
+        "desolate_hud_targethud.txt",
+    }
+    for _, f in ipairs(files) do
+        pcall(function() if isfile(f) then delfile(f) end end)
+    end
+    watermark.Position = UDim2.new(0, 10, 0, 10)
+    fpsFrame.Position = UDim2.new(0, 10, 0, 60)
+    coordFrame.Position = UDim2.new(0, 10, 0, 90)
+    targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
+    task.spawn(function()
+        task.wait(0.3)
+        state.Misc[5].enabled = false
+        refreshModules()
     end)
 end
 
 -- =========================================================
--- DRAG + MOBILE BUTTON + OPEN KEY
+-- DRAG MAIN + MOBILE + OPEN KEY
 -- =========================================================
 do
     local dragging, dragStart, startPos
@@ -1299,7 +1416,6 @@ end)
 refreshCategories()
 refreshModules()
 
--- Включаем модули, которые по умолчанию true
 watermark.Visible = state.Render[1].enabled
 fpsFrame.Visible = state.HUD[1].enabled
 crosshair.Visible = state.HUD[4].enabled
