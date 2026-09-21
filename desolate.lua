@@ -1,7 +1,7 @@
--- Desolate Client v4.3.1
--- New menu structure + Mouse3 keybind + KeyBinds in HUD + FOV in Visual
+-- Desolate Client v4.3.2
+-- FOV in Misc, PMB opens settings, ChinaHat removed
 
-local VERSION = "4.3.1"
+local VERSION = "4.3.2"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -215,7 +215,7 @@ local OPEN_KEY = Enum.KeyCode.RightShift
 local currentTheme = "Dark"
 
 -- =========================================================
--- STATE
+-- STATE (ChinaHat removed)
 -- =========================================================
 local state = {
     Combat = {
@@ -253,26 +253,20 @@ local state = {
             { label = "Speed", min = 5, max = 50, value = 18 },
             { label = "Size",  min = 1, max = 10, value = 3 },
           } },
-        { name = "China Hat",    enabled = false, actions = {}, keybind = nil,
-          sliders = {
-            { label = "Distance", min = 0.5, max = 5,   value = 1.6 },
-            { label = "Neon",     min = 0,   max = 100, value = 100 },
-            { label = "Light",    min = 0,   max = 10,  value = 4 },
-          } },
         { name = "Damage Ind",   enabled = false, actions = {}, keybind = nil },
         { name = "Kill Effect",  enabled = false, actions = {}, keybind = nil },
 
         { name = "Overlay",      isHeader = true },
         { name = "Draw FOV",     enabled = false, actions = {}, keybind = nil,
           slider = { min = 1, max = 30, value = 15 } },
-        { name = "FOV",          enabled = false, actions = {}, keybind = nil,
-          slider = { min = 40, max = 140, value = 70 } },
         { name = "ESP",          enabled = false, actions = {}, keybind = nil },
         { name = "NameTags",     enabled = false, actions = {}, keybind = nil },
     },
     Misc = {
         { name = "Utility",       isHeader = true },
         { name = "Camera",        enabled = false, actions = {}, keybind = nil },
+        { name = "FOV",           enabled = false, actions = {}, keybind = nil,
+          slider = { min = 40, max = 140, value = 70 } },
         { name = "Show Desolate Users", enabled = false, actions = {}, keybind = nil },
         { name = "ServerHop",     enabled = false, actions = {}, keybind = nil },
         { name = "Reset HUD Pos", enabled = false, actions = {}, keybind = nil },
@@ -302,7 +296,7 @@ local function findMod(cat, name)
 end
 
 -- =========================================================
--- MOD CACHE
+-- MOD CACHE (no chinaHat)
 -- =========================================================
 local MOD = {}
 local function cacheModuleRefs()
@@ -318,14 +312,13 @@ local function cacheModuleRefs()
     MOD.jumpCircle = findMod("Visual", "JumpCircle")
     MOD.trails = findMod("Visual", "Trails")
     MOD.particles = findMod("Visual", "Particles")
-    MOD.chinaHat = findMod("Visual", "China Hat")
     MOD.damageInd = findMod("Visual", "Damage Ind")
     MOD.killEffect = findMod("Visual", "Kill Effect")
     MOD.drawFov = findMod("Visual", "Draw FOV")
-    MOD.fov = findMod("Visual", "FOV")
     MOD.esp = findMod("Visual", "ESP")
     MOD.nameTags = findMod("Visual", "NameTags")
     MOD.camera = findMod("Misc", "Camera")
+    MOD.fov = findMod("Misc", "FOV")
     MOD.showUsers = findMod("Misc", "Show Desolate Users")
     MOD.serverHop = findMod("Misc", "ServerHop")
     MOD.resetHUDPos = findMod("Misc", "Reset HUD Pos")
@@ -608,6 +601,7 @@ cacheModuleRefs()
 
 local capturingBind = nil
 local capturingBtn = nil
+local expandedModules = {}
 
 local function refreshModules()
     for _, c in ipairs(modScroll:GetChildren()) do
@@ -645,9 +639,13 @@ local function refreshModules()
             hdr.LayoutOrder = i
             hdr.Parent = modScroll
         else
-            local cardHeight = 30
-            if mod.sliders then cardHeight = 30 + #mod.sliders * 22 + 6
-            elseif mod.slider then cardHeight = 62 end
+            local hasSettings = mod.slider or mod.sliders
+            local isExpanded = hasSettings and expandedModules[mod.name] == true
+
+            local openHeight = 30
+            if mod.sliders then openHeight = 30 + #mod.sliders * 22 + 6
+            elseif mod.slider then openHeight = 62 end
+            local cardHeight = isExpanded and openHeight or 30
 
             local card = Instance.new("Frame")
             card.Name = mod.name
@@ -655,6 +653,7 @@ local function refreshModules()
             card.BackgroundColor3 = BG3; card.BorderSizePixel = 0
             card.LayoutOrder = i; card.Parent = modScroll
             Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+            card.ClipsDescendants = true
 
             local nameLbl = Instance.new("TextLabel")
             nameLbl.BackgroundTransparency = 1
@@ -693,14 +692,33 @@ local function refreshModules()
             end
             kbBtn.MouseButton1Click:Connect(startCapture)
 
+            local settings = nil
+            if hasSettings then
+                settings = Instance.new("Frame")
+                settings.Name = "Settings"
+                settings.Position = UDim2.new(0, 0, 0, 30)
+                settings.Size = UDim2.new(1, 0, 0, openHeight - 30)
+                settings.BackgroundTransparency = 1
+                settings.Visible = isExpanded
+                settings.Parent = card
+            end
+
             card.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton3 then startCapture() end
+                if input.UserInputType == Enum.UserInputType.MouseButton3 then
+                    startCapture()
+                end
+                if input.UserInputType == Enum.UserInputType.MouseButton2 and hasSettings and settings then
+                    expandedModules[mod.name] = not expandedModules[mod.name]
+                    local newExpanded = expandedModules[mod.name]
+                    settings.Visible = newExpanded
+                    card.Size = UDim2.new(1, -8, 0, newExpanded and openHeight or 30)
+                end
             end)
 
             local function createSlider(sl, yPos, onUpdate)
                 local track = Instance.new("Frame")
                 track.Size = UDim2.new(1, -30, 0, 6); track.Position = UDim2.new(0, 15, 0, yPos)
-                track.BackgroundColor3 = BG4; track.BorderSizePixel = 0; track.Parent = card
+                track.BackgroundColor3 = BG4; track.BorderSizePixel = 0; track.Parent = settings
                 Instance.new("UICorner", track).CornerRadius = UDim.new(0, 4)
 
                 local fill = Instance.new("Frame")
@@ -712,7 +730,7 @@ local function refreshModules()
                 valueLbl.BackgroundTransparency = 1; valueLbl.Position = UDim2.new(1, -70, 0, yPos - 8)
                 valueLbl.Size = UDim2.new(0, 60, 0, 16); valueLbl.Font = FONT
                 valueLbl.TextSize = 11; valueLbl.TextColor3 = ACCENT
-                valueLbl.Text = string.format("%.1f", sl.value); valueLbl.Parent = card
+                valueLbl.Text = string.format("%.1f", sl.value); valueLbl.Parent = settings
 
                 if sl.label then
                     local labLbl = Instance.new("TextLabel")
@@ -723,7 +741,7 @@ local function refreshModules()
                     labLbl.TextColor3 = MUTED
                     labLbl.TextXAlignment = Enum.TextXAlignment.Left
                     labLbl.Text = sl.label
-                    labLbl.Parent = card
+                    labLbl.Parent = settings
                 end
 
                 local dragging = false
@@ -750,17 +768,19 @@ local function refreshModules()
                 end)
             end
 
-            if mod.slider then
-                createSlider(mod.slider, 46, mod.actions.onChange)
-                if mod.actions.onChange then pcall(mod.actions.onChange, mod.slider.value) end
-            end
-            if mod.sliders then
-                for idx, sl in ipairs(mod.sliders) do
-                    local y = 40 + (idx - 1) * 22
-                    createSlider(sl, y, function(v)
-                        if mod.actions.onSliderChange then pcall(mod.actions.onSliderChange, idx, v) end
-                    end)
-                    if mod.actions.onSliderChange then pcall(mod.actions.onSliderChange, idx, sl.value) end
+            if hasSettings then
+                if mod.slider then
+                    createSlider(mod.slider, 16, mod.actions.onChange)
+                    if mod.actions.onChange then pcall(mod.actions.onChange, mod.slider.value) end
+                end
+                if mod.sliders then
+                    for idx, sl in ipairs(mod.sliders) do
+                        local y = 10 + (idx - 1) * 22
+                        createSlider(sl, y, function(v)
+                            if mod.actions.onSliderChange then pcall(mod.actions.onSliderChange, idx, v) end
+                        end)
+                        if mod.actions.onSliderChange then pcall(mod.actions.onSliderChange, idx, sl.value) end
+                    end
                 end
             end
         end
@@ -894,7 +914,7 @@ settingsNote.BackgroundTransparency = 1; settingsNote.Position = UDim2.new(0, 16
 settingsNote.Size = UDim2.new(1, -32, 0, 130); settingsNote.Font = FONT; settingsNote.TextSize = 11
 settingsNote.TextColor3 = MUTED; settingsNote.TextXAlignment = Enum.TextXAlignment.Left
 settingsNote.TextYAlignment = Enum.TextYAlignment.Top; settingsNote.TextWrapped = true
-settingsNote.Text = "- RightShift / D — toggle menu\n- Mouse3 on module — bind key\n- Click bind button — bind key\n- Escape during bind — clear\n- S save / L load / R reset\n- HUD drag with mouse"
+settingsNote.Text = "- RightShift / D — toggle menu\n- ПКМ по модулю — открыть настройки\n- Mouse3 по модулю — бинд\n- Клик по [NONE] — тоже бинд\n- Escape во время бинда — очистить\n- S save / L load / R reset"
 settingsNote.Parent = subBody
 
 local function applyStaticColors()
@@ -1075,9 +1095,7 @@ end
 MOD.drawFov.actions.onToggle = function(on) drawFovFrame.Visible = on; if on then updateDrawFov(MOD.drawFov.slider.value) end end
 MOD.drawFov.actions.onChange = function(v) if not MOD.drawFov.enabled then return end; updateDrawFov(v) end
 
--- =========================================================
--- KEYBINDS HUD overlay
--- =========================================================
+-- KeyBinds overlay
 local kbFrame = Instance.new("Frame")
 kbFrame.Name = "KeyBindsHUD"
 kbFrame.Size = UDim2.new(0, 200, 0, 80)
@@ -1387,88 +1405,6 @@ MOD.skyPreset.actions.onChange = function(v)
 end
 
 -- =========================================================
--- CHINA HAT
--- =========================================================
-local chinaParts = {}
-local chinaPointLight = nil
-local function destroyChinaHat()
-    for _, p in ipairs(chinaParts) do
-        if p and p.part and p.part.Parent then pcall(function() p.part:Destroy() end) end
-    end
-    chinaParts = {}
-    if chinaPointLight then pcall(function() chinaPointLight:Destroy() end); chinaPointLight = nil end
-end
-local function buildChinaHat()
-    destroyChinaHat()
-    local layers = {
-        { y = 0.00, r = 1.55, t = 0.10 }, { y = 0.07, r = 1.45, t = 0.10 },
-        { y = 0.14, r = 1.32, t = 0.10 }, { y = 0.21, r = 1.18, t = 0.10 },
-        { y = 0.28, r = 1.03, t = 0.10 }, { y = 0.35, r = 0.87, t = 0.10 },
-        { y = 0.42, r = 0.70, t = 0.10 }, { y = 0.49, r = 0.53, t = 0.10 },
-        { y = 0.56, r = 0.37, t = 0.10 }, { y = 0.63, r = 0.22, t = 0.10 },
-        { y = 0.70, r = 0.10, t = 0.12 },
-    }
-    local neonVal = MOD.chinaHat.sliders[2] and MOD.chinaHat.sliders[2].value or 100
-    local lightVal = MOD.chinaHat.sliders[3] and MOD.chinaHat.sliders[3].value or 4
-    local transparency = 1 - (neonVal / 100) * 0.95
-    for _, layer in ipairs(layers) do
-        local p = Instance.new("Part")
-        p.Name = "DesolateChinaHat"; p.Shape = Enum.PartType.Cylinder
-        p.Material = Enum.Material.Neon; p.Color = ACCENT
-        p.Size = Vector3.new(layer.t, layer.r * 2, layer.r * 2)
-        p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
-        p.Anchored = true; p.CastShadow = false; p.Massless = true
-        p.Transparency = transparency; p.LightInfluence = 0; p.Parent = Workspace
-        table.insert(chinaParts, { part = p, offsetY = layer.y })
-    end
-    if chinaParts[#chinaParts] and chinaParts[#chinaParts].part then
-        chinaPointLight = Instance.new("PointLight")
-        chinaPointLight.Color = ACCENT; chinaPointLight.Brightness = lightVal
-        chinaPointLight.Range = lightVal * 6; chinaPointLight.Shadows = false
-        chinaPointLight.Parent = chinaParts[#chinaParts].part
-    end
-end
-MOD.chinaHat.actions.onToggle = function(on) if on then buildChinaHat() else destroyChinaHat() end end
-MOD.chinaHat.actions.onSliderChange = function(idx, v)
-    if idx == 2 then
-        local transparency = 1 - (v / 100) * 0.95
-        for _, e in ipairs(chinaParts) do
-            if e.part then e.part.Transparency = transparency; e.part.Color = ACCENT end
-        end
-        if chinaPointLight then chinaPointLight.Brightness = (v / 100) * 8; chinaPointLight.Color = ACCENT end
-    elseif idx == 3 then
-        if chinaPointLight then chinaPointLight.Range = v * 6 end
-    end
-end
-RunService.Heartbeat:Connect(function()
-    if not MOD.chinaHat.enabled then
-        if #chinaParts > 0 then destroyChinaHat() end
-        return
-    end
-    local char = player.Character; if not char then return end
-    local head = char:FindFirstChild("Head"); if not head then return end
-    if not chinaParts[1] or not chinaParts[1].part or not chinaParts[1].part.Parent then
-        buildChinaHat(); if #chinaParts == 0 then return end
-    end
-    local dist = MOD.chinaHat.sliders[1] and MOD.chinaHat.sliders[1].value or 1.6
-    local neonVal = MOD.chinaHat.sliders[2] and MOD.chinaHat.sliders[2].value or 100
-    local transparency = 1 - (neonVal / 100) * 0.95
-    local t = tick()
-    local baseCF = head.CFrame * CFrame.new(0, dist + math.sin(t * 2) * 0.06, 0) * CFrame.Angles(0, t * 0.8, math.rad(90))
-    for _, e in ipairs(chinaParts) do
-        if e.part then
-            e.part.CFrame = baseCF * CFrame.new(e.offsetY, 0, 0)
-            e.part.Color = ACCENT; e.part.Transparency = transparency
-        end
-    end
-    if chinaPointLight then chinaPointLight.Color = ACCENT end
-end)
-player.CharacterAdded:Connect(function()
-    task.wait(0.5); refreshCharacterCache()
-    if MOD.chinaHat.enabled then destroyChinaHat(); task.wait(0.1); buildChinaHat() end
-end)
-
--- =========================================================
 -- TIME CHANGER
 -- =========================================================
 MOD.timeChanger.actions.onToggle = function(on)
@@ -1722,7 +1658,7 @@ end)
 MOD.reach.actions.onChange = function(v) if not MOD.reach.enabled then return end; pcall(function() player.Reach = v end) end
 MOD.reach.actions.onToggle = function(on) pcall(function() player.Reach = on and MOD.reach.slider.value or 10 end) end
 
--- FOV (in Visual)
+-- FOV (Misc)
 local originalFOV = Camera.FieldOfView
 MOD.fov.actions.onToggle = function(on) Camera.FieldOfView = on and MOD.fov.slider.value or originalFOV end
 MOD.fov.actions.onChange = function(v) if not MOD.fov.enabled then return end; Camera.FieldOfView = v end
