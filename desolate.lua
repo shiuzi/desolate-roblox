@@ -1,10 +1,10 @@
 --[[
-    Desolate Client — v2.1.0
+    Desolate Client — v2.2.0
     Xeno v1.3.60+ | loadstring(game:HttpGet("URL"))()
-    New: Noclip + перетаскивание HUD с сохранением
+    New: Custom Sky + Fog + Sky Preset
 ]]
 
-local VERSION = "2.1.0"
+local VERSION = "2.2.0"
 
 -- =========================================================
 -- AUTH CONFIG
@@ -219,38 +219,44 @@ local OPEN_KEY = Enum.KeyCode.RightShift
 -- =========================================================
 local state = {
     Render = {
-        { name = "Watermark",  enabled = true,  actions = {} },
-        { name = "Fullbright", enabled = false, actions = {} },
-        { name = "Arrows",     enabled = false, actions = {} },
-        { name = "NameTags",   enabled = false, actions = {} },
-        { name = "ESP",        enabled = false, actions = {} },
-        { name = "JumpCircle", enabled = false, actions = {} },
-        { name = "Trails",     enabled = false, actions = {} },
-        { name = "Particles",  enabled = false, actions = {} },
+        { name = "Watermark",  enabled = true,  actions = {} },   -- [1]
+        { name = "Fullbright", enabled = false, actions = {} },   -- [2]
+        { name = "Arrows",     enabled = false, actions = {} },   -- [3]
+        { name = "NameTags",   enabled = false, actions = {} },   -- [4]
+        { name = "ESP",        enabled = false, actions = {} },   -- [5]
+        { name = "JumpCircle", enabled = false, actions = {} },   -- [6]
+        { name = "Trails",     enabled = false, actions = {} },   -- [7]
+        { name = "Particles",  enabled = false, actions = {} },   -- [8]
+        { name = "Custom Sky", enabled = false, actions = {},     -- [9]
+          slider = { min = 0, max = 24, value = 12 } },
+        { name = "Fog",        enabled = false, actions = {},     -- [10]
+          slider = { min = 0, max = 500, value = 100 } },
+        { name = "Sky Preset", enabled = false, actions = {},     -- [11]
+          slider = { min = 1, max = 5, value = 1 } },
     },
     HUD = {
-        { name = "FPS Counter", enabled = true,  actions = {} },
-        { name = "Coordinates", enabled = false, actions = {} },
-        { name = "TargetHUD",   enabled = false, actions = {} },
-        { name = "Crosshair",   enabled = true,  actions = {} },
+        { name = "FPS Counter", enabled = true,  actions = {} },  -- [1]
+        { name = "Coordinates", enabled = false, actions = {} },  -- [2]
+        { name = "TargetHUD",   enabled = false, actions = {} },  -- [3]
+        { name = "Crosshair",   enabled = true,  actions = {} },  -- [4]
     },
     Misc = {
-        { name = "AntiAFK",       enabled = false, actions = {} },
-        { name = "Noclip",        enabled = false, actions = {} },
-        { name = "AutoClicker",   enabled = false, actions = {},
+        { name = "AntiAFK",       enabled = false, actions = {} },  -- [1]
+        { name = "Noclip",        enabled = false, actions = {} },  -- [2]
+        { name = "AutoClicker",   enabled = false, actions = {},    -- [3]
           slider = { min = 1, max = 20, value = 8 } },
-        { name = "ServerHop",     enabled = false, actions = {} },
-        { name = "Reset HUD Pos", enabled = false, actions = {} },
+        { name = "ServerHop",     enabled = false, actions = {} },  -- [4]
+        { name = "Reset HUD Pos", enabled = false, actions = {} },  -- [5]
     },
     Player = {
-        { name = "WalkSpeed", enabled = false, actions = {},
+        { name = "WalkSpeed", enabled = false, actions = {},        -- [1]
           slider = { min = 8, max = 200, value = 16 } },
-        { name = "JumpPower", enabled = false, actions = {},
+        { name = "JumpPower", enabled = false, actions = {},        -- [2]
           slider = { min = 30, max = 300, value = 50 } },
-        { name = "Fly",       enabled = false, actions = {},
+        { name = "Fly",       enabled = false, actions = {},        -- [3]
           slider = { min = 10, max = 200, value = 60 } },
-        { name = "BunnyHop",  enabled = false, actions = {} },
-        { name = "Reach",     enabled = false, actions = {},
+        { name = "BunnyHop",  enabled = false, actions = {} },      -- [4]
+        { name = "Reach",     enabled = false, actions = {},        -- [5]
           slider = { min = 5, max = 50, value = 10 } },
     },
 }
@@ -270,7 +276,6 @@ if not gui.Parent then
     if not ok or not gui.Parent then gui.Parent = player:WaitForChild("PlayerGui") end
 end
 
--- === MAIN WINDOW ===
 local main = Instance.new("Frame")
 main.Size = UDim2.new(0, 500, 0, 380)
 main.Position = UDim2.new(0.5, -250, 0.5, -190)
@@ -282,7 +287,6 @@ local stroke = Instance.new("UIStroke")
 stroke.Color = ACCENT; stroke.Thickness = 1; stroke.Transparency = 0.6
 stroke.Parent = main
 
--- Header
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 32)
 header.BackgroundColor3 = BG2; header.BorderSizePixel = 0; header.Parent = main
@@ -313,7 +317,6 @@ closeBtn.Text = "×"; closeBtn.BorderSizePixel = 0; closeBtn.Parent = header
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
 closeBtn.MouseButton1Click:Connect(function() main.Visible = false end)
 
--- Body
 local body = Instance.new("Frame")
 body.Position = UDim2.new(0, 0, 0, 32); body.Size = UDim2.new(1, 0, 1, -32)
 body.BackgroundTransparency = 1; body.Parent = main
@@ -347,9 +350,6 @@ local modList = Instance.new("UIListLayout")
 modList.Padding = UDim.new(0, 6); modList.SortOrder = Enum.SortOrder.LayoutOrder
 modList.Parent = modScroll
 
--- =========================================================
--- BUILDERS
--- =========================================================
 local currentCat = "Render"
 
 local function refreshModules()
@@ -479,25 +479,17 @@ if not hudGui.Parent then
     if not ok or not hudGui.Parent then hudGui.Parent = player:WaitForChild("PlayerGui") end
 end
 
--- =========================================================
--- HUD DRAG HELPER
--- =========================================================
 local function makeDraggable(frame, name, defaultX, defaultY)
     frame.Active = true
-
     local dragging, dragStart, startPos
-
     frame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
            or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
+            dragging = true; dragStart = input.Position; startPos = frame.Position
             local s = frame:FindFirstChildOfClass("UIStroke")
             if s then s.Transparency = 0 end
         end
     end)
-
     UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
            or input.UserInputType == Enum.UserInputType.Touch) then
@@ -507,7 +499,6 @@ local function makeDraggable(frame, name, defaultX, defaultY)
                 startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
-
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
            or input.UserInputType == Enum.UserInputType.Touch then
@@ -525,8 +516,6 @@ local function makeDraggable(frame, name, defaultX, defaultY)
             end
         end
     end)
-
-    -- Восстановить позицию
     local saved = fs.read("desolate_hud_" .. name .. ".txt")
     local loaded = false
     if saved then
@@ -542,12 +531,8 @@ local function makeDraggable(frame, name, defaultX, defaultY)
     if not loaded and defaultX and defaultY then
         frame.Position = UDim2.new(0, defaultX, 0, defaultY)
     end
-
-    -- Подсветка-хинт что двигается
     local hint = Instance.new("UIStroke")
-    hint.Color = ACCENT
-    hint.Thickness = 1
-    hint.Transparency = 0.75
+    hint.Color = ACCENT; hint.Thickness = 1; hint.Transparency = 0.75
     hint.Parent = frame
 end
 
@@ -941,6 +926,173 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- =========================================================
+-- CUSTOM SKY + FOG + SKY PRESET
+-- =========================================================
+local SKY_PRESETS = {
+    {
+        name = "Day",
+        clockTime = 12,
+        ambient = Color3.fromRGB(128, 128, 128),
+        outdoor = Color3.fromRGB(128, 128, 128),
+        fogColor = Color3.fromRGB(200, 220, 255),
+        fogEnd = 1000,
+    },
+    {
+        name = "Sunset",
+        clockTime = 17.5,
+        ambient = Color3.fromRGB(90, 70, 80),
+        outdoor = Color3.fromRGB(140, 90, 80),
+        fogColor = Color3.fromRGB(255, 130, 80),
+        fogEnd = 500,
+    },
+    {
+        name = "Night",
+        clockTime = 0,
+        ambient = Color3.fromRGB(20, 20, 40),
+        outdoor = Color3.fromRGB(30, 30, 60),
+        fogColor = Color3.fromRGB(10, 10, 30),
+        fogEnd = 300,
+    },
+    {
+        name = "Desolate",
+        clockTime = 22,
+        ambient = Color3.fromRGB(20, 25, 35),
+        outdoor = Color3.fromRGB(25, 30, 45),
+        fogColor = Color3.fromRGB(0, 40, 60),
+        fogEnd = 250,
+    },
+    {
+        name = "Blood Moon",
+        clockTime = 2,
+        ambient = Color3.fromRGB(60, 15, 15),
+        outdoor = Color3.fromRGB(80, 20, 20),
+        fogColor = Color3.fromRGB(120, 0, 0),
+        fogEnd = 200,
+    },
+}
+
+local currentSkyPreset = 1
+local customSkyObj = nil
+
+-- Сохраняем оригинальные значения Lighting при запуске скрипта
+local originalLighting = {
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    FogColor = Lighting.FogColor,
+    FogStart = Lighting.FogStart,
+    FogEnd = Lighting.FogEnd,
+    ClockTime = Lighting.ClockTime,
+    Brightness = Lighting.Brightness,
+}
+
+local function ensureSkyObject()
+    if not customSkyObj or not customSkyObj.Parent then
+        customSkyObj = Instance.new("Sky")
+        customSkyObj.Name = "DesolateCustomSky"
+        customSkyObj.SkyboxBk = "rbxasset://textures/sky/sky512_bk.tex"
+        customSkyObj.SkyboxDn = "rbxasset://textures/sky/sky512_dn.tex"
+        customSkyObj.SkyboxFt = "rbxasset://textures/sky/sky512_ft.tex"
+        customSkyObj.SkyboxLf = "rbxasset://textures/sky/sky512_lf.tex"
+        customSkyObj.SkyboxRt = "rbxasset://textures/sky/sky512_rt.tex"
+        customSkyObj.SkyboxUp = "rbxasset://textures/sky/sky512_up.tex"
+        customSkyObj.Parent = Lighting
+    end
+    return customSkyObj
+end
+
+local function applySkyPreset(idx)
+    local p = SKY_PRESETS[idx]
+    if not p then return end
+    ensureSkyObject()
+    Lighting.ClockTime = p.clockTime
+    Lighting.Ambient = p.ambient
+    Lighting.OutdoorAmbient = p.outdoor
+    Lighting.FogColor = p.fogColor
+    Lighting.FogStart = 0
+    Lighting.FogEnd = p.fogEnd
+    Lighting.Brightness = 2
+end
+
+-- [9] Custom Sky
+state.Render[9].actions.onToggle = function(on)
+    if on then
+        applySkyPreset(currentSkyPreset)
+        Lighting.ClockTime = state.Render[9].slider.value
+        -- если туман включён - синхронизируем с его слайдером
+        if state.Render[10].enabled then
+            Lighting.FogStart = 0
+            Lighting.FogEnd = state.Render[10].slider.value
+        end
+    else
+        if customSkyObj then
+            customSkyObj:Destroy()
+            customSkyObj = nil
+        end
+        pcall(function() Lighting.ClockTime = originalLighting.ClockTime end)
+        pcall(function() Lighting.Ambient = originalLighting.Ambient end)
+        pcall(function() Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient end)
+        pcall(function() Lighting.Brightness = originalLighting.Brightness end)
+        -- если туман тоже выключен - возвращаем туман
+        if not state.Render[10].enabled then
+            pcall(function() Lighting.FogColor = originalLighting.FogColor end)
+            pcall(function() Lighting.FogStart = originalLighting.FogStart end)
+            pcall(function() Lighting.FogEnd = originalLighting.FogEnd end)
+        end
+    end
+end
+
+state.Render[9].actions.onChange = function(v)
+    if not state.Render[9].enabled then return end
+    Lighting.ClockTime = v
+end
+
+-- [10] Fog
+state.Render[10].actions.onToggle = function(on)
+    if on then
+        Lighting.FogStart = 0
+        Lighting.FogEnd = state.Render[10].slider.value
+        if not state.Render[9].enabled then
+            Lighting.FogColor = Color3.fromRGB(60, 70, 90)
+        end
+    else
+        if not state.Render[9].enabled then
+            Lighting.FogColor = originalLighting.FogColor
+            Lighting.FogStart = originalLighting.FogStart
+            Lighting.FogEnd = originalLighting.FogEnd
+        end
+    end
+end
+
+state.Render[10].actions.onChange = function(v)
+    if not state.Render[10].enabled then return end
+    Lighting.FogStart = 0
+    Lighting.FogEnd = v
+end
+
+-- [11] Sky Preset
+state.Render[11].actions.onToggle = function(on)
+    if not on then return end
+    currentSkyPreset = math.floor(state.Render[11].slider.value)
+    if state.Render[9].enabled then
+        applySkyPreset(currentSkyPreset)
+        Lighting.ClockTime = state.Render[9].slider.value
+        if state.Render[10].enabled then
+            Lighting.FogEnd = state.Render[10].slider.value
+        end
+    end
+end
+
+state.Render[11].actions.onChange = function(v)
+    currentSkyPreset = math.floor(v)
+    if not state.Render[9].enabled then return end
+    applySkyPreset(currentSkyPreset)
+    Lighting.ClockTime = state.Render[9].slider.value
+    if state.Render[10].enabled then
+        Lighting.FogEnd = state.Render[10].slider.value
+    end
+end
+
+-- =========================================================
 -- TARGET HUD
 -- =========================================================
 local targetHud = Instance.new("Frame")
@@ -1023,14 +1175,12 @@ end)
 
 task.spawn(function()
     while gui.Parent do
-        -- Watermark
         if state.Render[1].enabled then
             local ping = 0
             pcall(function() ping = math.floor(player:GetNetworkPing() * 1000) end)
             wLabel.Text = string.format("Desolate | FPS: %d | PING: %d | %s", fps, ping, player.Name)
         end
 
-        -- FPS
         if state.HUD[1].enabled then
             fpsLabel.Text = "FPS: " .. fps
             fpsLabel.TextColor3 = fps >= 60 and Color3.fromRGB(120, 255, 120)
@@ -1038,7 +1188,6 @@ task.spawn(function()
                 or Color3.fromRGB(255, 100, 100)
         end
 
-        -- Coords
         if state.HUD[2].enabled then
             local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
             if hrp then
@@ -1047,7 +1196,6 @@ task.spawn(function()
             end
         end
 
-        -- Arrows
         if state.Render[3].enabled then
             for _, a in ipairs(arrowPool) do a.Visible = false end
             local myChar = player.Character
@@ -1093,7 +1241,6 @@ task.spawn(function()
             end
         end
 
-        -- NameTags update
         if state.Render[4].enabled then
             for plr, data in pairs(nametags) do
                 if not plr or not plr.Parent then
@@ -1117,7 +1264,6 @@ task.spawn(function()
             end
         end
 
-        -- ESP update
         if state.Render[5].enabled then
             for plr, hl in pairs(espHighlights) do
                 if not plr or not plr.Character or not plr.Character.Parent then
@@ -1143,7 +1289,6 @@ task.spawn(function()
             end
         end
 
-        -- TargetHUD
         if state.HUD[3].enabled then
             local plr, hum = getTarget()
             if plr and hum then
@@ -1173,6 +1318,19 @@ end)
 -- =========================================================
 -- PLAYER ACTIONS
 -- =========================================================
+-- [2] Fullbright
+state.Render[2].actions.onToggle = function(on)
+    if on then
+        Lighting.Ambient = Color3.fromRGB(200, 200, 200)
+        Lighting.OutdoorAmbient = Color3.fromRGB(200, 200, 200)
+        Lighting.Brightness = 3
+    else
+        Lighting.Ambient = originalLighting.Ambient
+        Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+        Lighting.Brightness = originalLighting.Brightness
+    end
+end
+
 RunService.Heartbeat:Connect(function()
     local char = player.Character
     if not char then return end
@@ -1185,14 +1343,12 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Fly
 local flyBV, flyBG
 state.Player[3].actions.onToggle = function(on)
     local char = player.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-
     if on then
         flyBV = Instance.new("BodyVelocity")
         flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -1225,7 +1381,6 @@ RunService.Heartbeat:Connect(function()
     flyBG.CFrame = camCF
 end)
 
--- BunnyHop
 state.Player[4].actions.onToggle = function(on) end
 RunService.Heartbeat:Connect(function()
     if not state.Player[4].enabled then return end
@@ -1239,7 +1394,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Reach
 state.Player[5].actions.onChange = function(v)
     if not state.Player[5].enabled then return end
     pcall(function() player.Reach = v end)
@@ -1255,7 +1409,6 @@ end
 -- =========================================================
 -- MISC ACTIONS
 -- =========================================================
--- [1] AntiAFK
 state.Misc[1].actions.onToggle = function(on)
     if on then
         if not _G.Desolate_AntiAFK then
@@ -1271,7 +1424,6 @@ state.Misc[1].actions.onToggle = function(on)
     end
 end
 
--- [2] Noclip
 state.Misc[2].actions.onToggle = function(on)
     if on then
         if _G.Desolate_Noclip then _G.Desolate_Noclip:Disconnect() end
@@ -1300,7 +1452,6 @@ state.Misc[2].actions.onToggle = function(on)
     end
 end
 
--- [3] AutoClicker
 state.Misc[3].actions.onToggle = function(on) end
 RunService.Heartbeat:Connect(function()
     if not state.Misc[3].enabled then return end
@@ -1314,7 +1465,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- [4] ServerHop
 state.Misc[4].actions.onToggle = function(on)
     if not on then return end
     task.spawn(function()
@@ -1340,7 +1490,6 @@ state.Misc[4].actions.onToggle = function(on)
     end)
 end
 
--- [5] Reset HUD Pos
 state.Misc[5].actions.onToggle = function(on)
     if not on then return end
     local files = {
