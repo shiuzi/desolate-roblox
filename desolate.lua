@@ -1,7 +1,8 @@
--- Desolate Client v4.2.1
+-- Desolate Client v4.2.2
 -- Xeno loader via request
+-- Fixed: China Hat + Particles (watchdog + safe destroy)
 
-local VERSION = "4.2.1"
+local VERSION = "4.2.2"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -1213,6 +1214,9 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- =========================================================
+-- TRAILS
+-- =========================================================
 local trailAccum = 0
 RunService.Heartbeat:Connect(function(dt)
     local char = player.Character
@@ -1245,22 +1249,31 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
+-- =========================================================
+-- PARTICLES (falling) — FIXED
+-- =========================================================
 local particlesMod = findMod("Render", "Particles")
 
-local function buildParticles()
+local function destroyParticlesEmitter()
     local char = player.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
+    local att = hrp:FindFirstChild("DesolateFallingEmitter")
+    if att then pcall(function() att:Destroy() end) end
+end
 
-    local existing = hrp:FindFirstChild("DesolateFallingEmitter")
-    if existing then existing:Destroy() end
-
+local function buildParticles()
+    destroyParticlesEmitter()
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
     if not particlesMod.enabled then return end
 
-    local rate  = particlesMod.sliders[1].value
-    local speed = particlesMod.sliders[2].value
-    local size  = particlesMod.sliders[3].value
+    local rate  = particlesMod.sliders[1] and particlesMod.sliders[1].value or 12
+    local speed = particlesMod.sliders[2] and particlesMod.sliders[2].value or 18
+    local size  = particlesMod.sliders[3] and particlesMod.sliders[3].value or 3
 
     local att = Instance.new("Attachment")
     att.Name = "DesolateFallingEmitter"
@@ -1293,17 +1306,7 @@ local function buildParticles()
 end
 
 particlesMod.actions.onToggle = function(on)
-    if on then buildParticles()
-    else
-        local char = player.Character
-        if char then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local att = hrp:FindFirstChild("DesolateFallingEmitter")
-                if att then att:Destroy() end
-            end
-        end
-    end
+    if on then buildParticles() else destroyParticlesEmitter() end
 end
 
 particlesMod.actions.onSliderChange = function(idx, v)
@@ -1334,6 +1337,21 @@ player.CharacterAdded:Connect(function()
     if particlesMod.enabled then buildParticles() end
 end)
 
+-- Watchdog: always keep particles alive
+RunService.Heartbeat:Connect(function()
+    if not particlesMod.enabled then return end
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    if not hrp:FindFirstChild("DesolateFallingEmitter") then
+        buildParticles()
+    end
+end)
+
+-- =========================================================
+-- SKY / FOG
+-- =========================================================
 local SKY_PRESETS = {
     { clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
     { clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
@@ -1428,17 +1446,29 @@ presetMod.actions.onChange = function(v)
     Lighting.ClockTime = skyMod.slider.value
 end
 
+-- =========================================================
+-- CHINA HAT — FIXED
+-- =========================================================
 local chinaParts = {}
 local chinaPointLight = nil
 local chinaMod = findMod("Render", "China Hat")
+local chinaBuilt = false
 
 local function destroyChinaHat()
-    for _, p in ipairs(chinaParts) do if p and p.Parent then p:Destroy() end end
-    chinaParts = {}; chinaPointLight = nil
+    for _, entry in ipairs(chinaParts) do
+        if entry.part and entry.part.Parent then
+            pcall(function() entry.part:Destroy() end)
+        end
+    end
+    chinaParts = {}
+    chinaPointLight = nil
+    chinaBuilt = false
 end
 
 local function buildChinaHat()
     destroyChinaHat()
+    if not chinaMod.enabled then return end
+
     local layers = {
         { y = 0.00, r = 1.55, t = 0.10 }, { y = 0.07, r = 1.45, t = 0.10 },
         { y = 0.14, r = 1.32, t = 0.10 }, { y = 0.21, r = 1.18, t = 0.10 },
@@ -1454,12 +1484,17 @@ local function buildChinaHat()
 
     for _, layer in ipairs(layers) do
         local p = Instance.new("Part")
+        p.Name = "DesolateChinaHat"
         p.Shape = Enum.PartType.Cylinder
         p.Material = Enum.Material.Neon
         p.Color = ACCENT
         p.Size = Vector3.new(layer.t, layer.r * 2, layer.r * 2)
-        p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
-        p.Anchored = true; p.CastShadow = false; p.Massless = true
+        p.CanCollide = false
+        p.CanQuery = false
+        p.CanTouch = false
+        p.Anchored = true
+        p.CastShadow = false
+        p.Massless = true
         p.Transparency = transparency
         p.LightInfluence = 0
         p.Parent = Workspace
@@ -1471,18 +1506,24 @@ local function buildChinaHat()
     chinaPointLight.Brightness = lightVal
     chinaPointLight.Range = lightVal * 6
     chinaPointLight.Shadows = false
-    chinaPointLight.Parent = chinaParts[#chinaParts].part
+    if chinaParts[#chinaParts] and chinaParts[#chinaParts].part then
+        chinaPointLight.Parent = chinaParts[#chinaParts].part
+    end
+    chinaBuilt = true
 end
 
 chinaMod.actions.onToggle = function(on)
     if on then buildChinaHat() else destroyChinaHat() end
 end
+
 chinaMod.actions.onSliderChange = function(idx, v)
     if idx == 2 then
         local transparency = 1 - (v / 100) * 0.95
         for _, entry in ipairs(chinaParts) do
-            entry.part.Transparency = transparency
-            entry.part.Color = ACCENT
+            if entry.part then
+                entry.part.Transparency = transparency
+                entry.part.Color = ACCENT
+            end
         end
         if chinaPointLight then
             chinaPointLight.Brightness = (v / 100) * 8
@@ -1493,15 +1534,22 @@ chinaMod.actions.onSliderChange = function(idx, v)
     end
 end
 
+-- Watchdog: always keep hat above head
 RunService.Heartbeat:Connect(function()
-    if not chinaMod.enabled then return end
+    if not chinaMod.enabled then
+        if chinaBuilt then destroyChinaHat() end
+        return
+    end
     local char = player.Character
     if not char then return end
     local head = char:FindFirstChild("Head")
     if not head then return end
-    if not chinaParts[1] or not chinaParts[1].part.Parent then
-        buildChinaHat(); return
+
+    if not chinaParts[1] or not chinaParts[1].part or not chinaParts[1].part.Parent then
+        buildChinaHat()
+        if not chinaParts[1] then return end
     end
+
     local dist = chinaMod.sliders[1] and chinaMod.sliders[1].value or 1.6
     local neonVal = chinaMod.sliders[2] and chinaMod.sliders[2].value or 100
     local transparency = 1 - (neonVal / 100) * 0.95
@@ -1509,13 +1557,23 @@ RunService.Heartbeat:Connect(function()
     local baseCF = head.CFrame * CFrame.new(0, dist + math.sin(t * 2) * 0.06, 0)
         * CFrame.Angles(0, t * 0.8, math.rad(90))
     for _, entry in ipairs(chinaParts) do
-        entry.part.CFrame = baseCF * CFrame.new(entry.offsetY, 0, 0)
-        entry.part.Color = ACCENT
-        entry.part.Transparency = transparency
+        if entry.part then
+            entry.part.CFrame = baseCF * CFrame.new(entry.offsetY, 0, 0)
+            entry.part.Color = ACCENT
+            entry.part.Transparency = transparency
+        end
     end
     if chinaPointLight then chinaPointLight.Color = ACCENT end
 end)
 
+player.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if chinaMod.enabled then buildChinaHat() end
+end)
+
+-- =========================================================
+-- TIME CHANGER
+-- =========================================================
 local timeMod = findMod("Render", "Time Changer")
 timeMod.actions.onToggle = function(on)
     if on then Lighting.ClockTime = timeMod.slider.value
@@ -1526,6 +1584,9 @@ timeMod.actions.onChange = function(v)
     Lighting.ClockTime = v
 end
 
+-- =========================================================
+-- DAMAGE INDICATOR
+-- =========================================================
 local damageIndGui = Instance.new("ScreenGui")
 damageIndGui.Name = "DesolateDmg"
 damageIndGui.ResetOnSpawn = false; damageIndGui.IgnoreGuiInset = true
@@ -1576,6 +1637,9 @@ findMod("Render", "Damage Ind").actions.onToggle = function(on)
     end
 end
 
+-- =========================================================
+-- TARGET HUD
+-- =========================================================
 local targetHud = Instance.new("Frame")
 targetHud.Size = UDim2.new(0, 220, 0, 70)
 targetHud.Position = UDim2.new(0.5, 40, 0.5, 40)
@@ -1957,7 +2021,7 @@ findMod("Misc", "Reset HUD Pos").actions.onToggle = function(on)
     task.spawn(function()
         task.wait(0.3); findMod("Misc", "Reset HUD Pos").enabled = false; refreshModules()
     end)
-end
+end)
 
 function applyLoadedModules()
     for cat, list in pairs(state) do
