@@ -1,10 +1,10 @@
 --[[
-    Desolate Client — v3.0.0
+    Desolate Client — v3.0.1
     Xeno v1.3.60+ | loadstring(game:HttpGet("URL"))()
-    New: Dark UI, Config system, China Hat, Time Changer, Block ESP, FOV, Kill Effect
+    Fix: China Hat (anchored, no fall), FPS in Watermark
 ]]
 
-local VERSION = "3.0.0"
+local VERSION = "3.0.1"
 
 -- =========================================================
 -- AUTH CONFIG
@@ -108,7 +108,7 @@ local function validateKey(key)
     return true, data
 end
 
--- === UI активации (тёмный) ===
+-- === UI активации ===
 local function showKeyUI(opts)
     local ACCENT = Color3.fromRGB(0, 200, 230)
     local BG, BG2 = Color3.fromRGB(6, 6, 10), Color3.fromRGB(14, 14, 20)
@@ -213,7 +213,6 @@ if not requireAuth() then return end
 -- DARK CONFIG
 -- =========================================================
 local ACCENT = Color3.fromRGB(0, 200, 230)
-local ACCENT2 = Color3.fromRGB(80, 60, 200)
 local BG   = Color3.fromRGB(6, 6, 10)
 local BG2  = Color3.fromRGB(10, 10, 14)
 local BG3  = Color3.fromRGB(14, 14, 20)
@@ -318,15 +317,15 @@ end
 
 local function resetConfig()
     fs.delete(CONFIG_FILE)
+    local defaults = {
+        ["Custom Sky"] = 12, ["Fog"] = 100, ["Sky Preset"] = 4,
+        ["Time Changer"] = 12, ["AutoClicker"] = 8, ["WalkSpeed"] = 16,
+        ["JumpPower"] = 50, ["Fly"] = 60, ["Reach"] = 10, ["FOV"] = 70,
+    }
     for cat, list in pairs(state) do
         for _, mod in ipairs(list) do
             mod.enabled = false
             if mod.slider then
-                local defaults = {
-                    ["Custom Sky"] = 12, ["Fog"] = 100, ["Sky Preset"] = 4,
-                    ["Time Changer"] = 12, ["AutoClicker"] = 8, ["WalkSpeed"] = 16,
-                    ["JumpPower"] = 50, ["Fly"] = 60, ["Reach"] = 10, ["FOV"] = 70,
-                }
                 mod.slider.value = defaults[mod.name] or mod.slider.value
             end
         end
@@ -382,8 +381,7 @@ titleLbl.TextXAlignment = Enum.TextXAlignment.Left; titleLbl.TextColor3 = ACCENT
 titleLbl.Text = "Desolate · v" .. VERSION
 titleLbl.Parent = header
 
--- Config buttons (Save / Load / Reset)
-local function makeHeaderBtn(text, xOff, tooltip, onClick)
+local function makeHeaderBtn(text, xOff, onClick)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(0, 26, 0, 22)
     b.Position = UDim2.new(1, xOff, 0, 6)
@@ -401,27 +399,25 @@ local function makeHeaderBtn(text, xOff, tooltip, onClick)
     end)
     b.MouseButton1Click:Connect(function()
         local ok = onClick()
-        -- визуальный фидбэк
         b.TextColor3 = (ok ~= false) and OK or ERROR
         task.delay(0.4, function() b.TextColor3 = TEXT end)
     end)
     return b
 end
 
-makeHeaderBtn("💾", -110, "Save Config", function()
+makeHeaderBtn("💾", -110, function()
     local ok = saveConfig()
     print("[Desolate] config saved:", ok)
     return ok
 end)
-makeHeaderBtn("📂", -80, "Load Config", function()
+makeHeaderBtn("📂", -80, function()
     local ok = loadConfig()
     print("[Desolate] config loaded:", ok)
     refreshModules()
-    -- применяем визуальные модули
     applyLoadedModules()
     return ok
 end)
-makeHeaderBtn("↺", -50, "Reset Config", function()
+makeHeaderBtn("↺", -50, function()
     resetConfig()
     refreshModules()
     applyLoadedModules()
@@ -437,7 +433,7 @@ closeBtn.Text = "×"; closeBtn.BorderSizePixel = 0; closeBtn.Parent = header
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
 closeBtn.MouseButton1Click:Connect(function()
     main.Visible = false
-    saveConfig()  -- авто-сохранение при закрытии
+    saveConfig()
 end)
 
 -- Body
@@ -474,9 +470,6 @@ local modList = Instance.new("UIListLayout")
 modList.Padding = UDim.new(0, 6); modList.SortOrder = Enum.SortOrder.LayoutOrder
 modList.Parent = modScroll
 
--- =========================================================
--- BUILDERS
--- =========================================================
 local currentCat = "Render"
 
 local function refreshModules()
@@ -656,7 +649,7 @@ end
 
 -- === WATERMARK ===
 local watermark = Instance.new("Frame")
-watermark.Size = UDim2.new(0, 340, 0, 40); watermark.Position = UDim2.new(0, 10, 0, 10)
+watermark.Size = UDim2.new(0, 380, 0, 40); watermark.Position = UDim2.new(0, 10, 0, 10)
 watermark.BackgroundColor3 = BG2; watermark.BackgroundTransparency = 0.15
 watermark.BorderSizePixel = 0; watermark.Visible = false; watermark.Parent = hudGui
 Instance.new("UICorner", watermark).CornerRadius = UDim.new(0, 6)
@@ -999,7 +992,6 @@ local function applySkyPreset(idx)
     Lighting.Brightness = 2
 end
 
--- [9] Custom Sky
 state.Render[9].actions.onToggle = function(on)
     if on then
         applySkyPreset(currentSkyPreset)
@@ -1026,7 +1018,6 @@ state.Render[9].actions.onChange = function(v)
     Lighting.ClockTime = v
 end
 
--- [10] Fog
 state.Render[10].actions.onToggle = function(on)
     if on then
         Lighting.FogStart = 0
@@ -1047,7 +1038,6 @@ state.Render[10].actions.onChange = function(v)
     Lighting.FogStart = 0; Lighting.FogEnd = v
 end
 
--- [11] Sky Preset
 state.Render[11].actions.onToggle = function(on)
     if not on then return end
     currentSkyPreset = math.floor(state.Render[11].slider.value)
@@ -1065,9 +1055,8 @@ state.Render[11].actions.onChange = function(v)
     if state.Render[10].enabled then Lighting.FogEnd = state.Render[10].slider.value end
 end
 
--- === CHINA HAT [12] ===
+-- === CHINA HAT [12] (fixed — anchored, non-physical) ===
 local chinaHat = nil
-local chinaAccum = 0
 
 state.Render[12].actions.onToggle = function(on)
     if not on and chinaHat then
@@ -1075,7 +1064,7 @@ state.Render[12].actions.onToggle = function(on)
     end
 end
 
-RunService.Heartbeat:Connect(function(dt)
+RunService.Heartbeat:Connect(function()
     if not state.Render[12].enabled then return end
     local char = player.Character
     if not char then return end
@@ -1091,22 +1080,18 @@ RunService.Heartbeat:Connect(function(dt)
         chinaHat.CanCollide = false
         chinaHat.CanQuery = false
         chinaHat.CanTouch = false
-        chinaHat.Anchored = false
+        chinaHat.Anchored = true
+        chinaHat.CastShadow = false
         chinaHat.Massless = true
         chinaHat.Transparency = 0
-        chinaHat.Parent = Workspace
-        local weld = Instance.new("WeldConstraint")
-        weld.Part0 = chinaHat; weld.Part1 = head; weld.Parent = chinaHat
-    end
-    chinaAccum += dt
-    -- мягкое вращение + парение
-    if chinaAccum >= 0.03 then
-        chinaAccum = 0
-        local t = tick()
         chinaHat.CFrame = head.CFrame
-            * CFrame.new(0, 1.6 + math.sin(t * 2) * 0.08, 0)
-            * CFrame.Angles(0, t * 0.8, math.rad(90))
+        chinaHat.Parent = Workspace
     end
+
+    local t = tick()
+    chinaHat.CFrame = head.CFrame
+        * CFrame.new(0, 1.6 + math.sin(t * 2) * 0.08, 0)
+        * CFrame.Angles(0, t * 0.8, math.rad(90))
 end)
 
 -- === TIME CHANGER [13] ===
@@ -1125,19 +1110,16 @@ end
 -- === BLOCK ESP [14] ===
 local blockEspParts = {}
 local blockEspConn = nil
-local blockEspTracked = {}
 
 state.Render[14].actions.onToggle = function(on)
     if on then
         blockEspConn = RunService.Heartbeat:Connect(function()
-            -- очищаем старые (если предмет исчез)
             for part, box in pairs(blockEspParts) do
                 if not part or not part.Parent then
                     if box then box:Destroy() end
                     blockEspParts[part] = nil
                 end
             end
-            -- находим сундуки/предметы рядом
             local char = player.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
@@ -1186,17 +1168,17 @@ end
 local lastHealth = nil
 local healthConn = nil
 
-local function showDamageIndicator(dmg, isKill)
+local function showDamageIndicator(dmg)
     local lbl = Instance.new("TextLabel")
     lbl.AnchorPoint = Vector2.new(0.5, 0.5)
     lbl.Position = UDim2.new(0.5, math.random(-30, 30), 0.5, 30)
     lbl.Size = UDim2.new(0, 200, 0, 30)
     lbl.BackgroundTransparency = 1
     lbl.Font = Enum.Font.GothamBold
-    lbl.TextSize = isKill and 22 or 18
+    lbl.TextSize = 18
     lbl.TextStrokeTransparency = 0.4
-    lbl.TextColor3 = isKill and Color3.fromRGB(255, 220, 60) or Color3.fromRGB(255, 80, 80)
-    lbl.Text = isKill and ("KILL +" .. dmg) or ("-" .. dmg)
+    lbl.TextColor3 = Color3.fromRGB(255, 80, 80)
+    lbl.Text = "-" .. dmg
     lbl.Parent = damageIndGui
     TweenService:Create(lbl, TweenInfo.new(0.8), {
         Position = UDim2.new(0.5, lbl.Position.X.Offset, 0.5, -20),
@@ -1215,7 +1197,7 @@ state.Render[15].actions.onToggle = function(on)
             if lastHealth == nil then lastHealth = hum.Health; return end
             if hum.Health < lastHealth then
                 local dmg = math.floor(lastHealth - hum.Health)
-                if dmg > 0 then showDamageIndicator(dmg, false) end
+                if dmg > 0 then showDamageIndicator(dmg) end
             end
             lastHealth = hum.Health
         end)
@@ -1291,6 +1273,20 @@ local function getTarget()
 end
 
 -- =========================================================
+-- FPS COUNTER (глобальный, для watermark)
+-- =========================================================
+local fps = 0
+local frames = 0
+local t0 = tick()
+RunService.RenderStepped:Connect(function()
+    frames += 1
+    local now = tick()
+    if now - t0 >= 1 then
+        fps = frames; frames = 0; t0 = now
+    end
+end)
+
+-- =========================================================
 -- MAIN UPDATE LOOP
 -- =========================================================
 task.spawn(function()
@@ -1298,7 +1294,8 @@ task.spawn(function()
         if state.Render[1].enabled then
             local ping = 0
             pcall(function() ping = math.floor(player:GetNetworkPing() * 1000) end)
-            wLabel.Text = string.format("Desolate · %s · PING: %d", player.Name, ping)
+            wLabel.Text = string.format("Desolate · %s · FPS: %d | PING: %d",
+                player.Name, fps, ping)
         end
 
         if state.HUD[1].enabled then
@@ -1415,7 +1412,6 @@ end)
 -- =========================================================
 -- PLAYER ACTIONS
 -- =========================================================
--- [2] Fullbright
 state.Render[2].actions.onToggle = function(on)
     if on then
         Lighting.Ambient = Color3.fromRGB(200, 200, 200)
@@ -1527,7 +1523,6 @@ if not killGui.Parent then
 end
 
 local function showKillEffect(victimName)
-    -- большая надпись по центру
     local lbl = Instance.new("TextLabel")
     lbl.AnchorPoint = Vector2.new(0.5, 0.5)
     lbl.Position = UDim2.new(0.5, 0, 0.4, 0)
@@ -1545,7 +1540,6 @@ local function showKillEffect(victimName)
     }):Play()
     task.delay(1.3, function() if lbl and lbl.Parent then lbl:Destroy() end end)
 
-    -- партиклы на жертве
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr.Name == victimName and plr.Character then
             local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
@@ -1571,7 +1565,6 @@ local function showKillEffect(victimName)
     end
 end
 
-local lastPlayerHealths = {}
 state.Player[7].actions.onToggle = function(on) end
 
 Players.PlayerAdded:Connect(function(plr)
@@ -1580,15 +1573,11 @@ Players.PlayerAdded:Connect(function(plr)
         if not hum then return end
         hum.Died:Connect(function()
             if not state.Player[7].enabled then return end
-            -- Кто убил? Если player.Kill... слишком сложно, просто показываем кто умер
-            -- Проверяем был ли игрок рядом (упрощённо)
             local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if not myHrp or not hrp then return end
             local dist = (myHrp.Position - hrp.Position).Magnitude
-            if dist < 60 then
-                showKillEffect(plr.Name)
-            end
+            if dist < 60 then showKillEffect(plr.Name) end
         end)
     end)
 end)
@@ -1686,10 +1675,9 @@ state.Misc[5].actions.onToggle = function(on)
 end
 
 -- =========================================================
--- APPLY LOADED MODULES (после loadConfig)
+-- APPLY LOADED MODULES
 -- =========================================================
 function applyLoadedModules()
-    -- выключаем все эффекты сначала
     for cat, list in pairs(state) do
         for _, mod in ipairs(list) do
             if mod.actions.onToggle then
