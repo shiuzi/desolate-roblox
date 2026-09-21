@@ -1,8 +1,8 @@
--- Desolate Client v4.2.3
+-- Desolate Client v4.2.4
 -- Xeno loader via request
--- Added: Custom Aura
+-- Added: Gen ESP (mana generators)
 
-local VERSION = "4.2.3"
+local VERSION = "4.2.4"
 
 local AUTH_URL  = "https://desolate-auth.desolate-ezi.workers.dev"
 local KEY_FILE  = "desolate_key.txt"
@@ -234,6 +234,14 @@ local state = {
         { name = "NameTags",     enabled = false, actions = {} },
         { name = "ESP",          enabled = false, actions = {} },
 
+        { name = "Object ESP",       isHeader = true },
+        { name = "Gen ESP",      enabled = false, actions = {},
+          sliders = {
+            { label = "Range",     min = 50,  max = 2000, value = 500 },
+            { label = "Thickness", min = 0.02, max = 0.3, value = 0.08 },
+          } },
+        { name = "Gen Labels",   enabled = false, actions = {} },
+
         { name = "Effects",          isHeader = true },
         { name = "JumpCircle",   enabled = false, actions = {} },
         { name = "Trails",       enabled = false, actions = {} },
@@ -249,8 +257,6 @@ local state = {
             { label = "Neon",     min = 0,   max = 100, value = 100 },
             { label = "Light",    min = 0,   max = 10,  value = 4 },
           } },
-        { name = "Custom Aura",  enabled = false, actions = {},
-          slider = { min = 3, max = 15, value = 6 } },
         { name = "Damage Ind",   enabled = false, actions = {} },
     },
     HUD = {
@@ -910,7 +916,6 @@ local function applyStaticColors()
     for _, b in ipairs(headerBtns) do
         b.BackgroundColor3 = BG4; b.TextColor3 = TEXT
     end
-    if auraPart then auraPart.Color = ACCENT end
 end
 
 function applyTheme(themeName)
@@ -1074,6 +1079,9 @@ end
 buildCrosshair()
 findMod("HUD", "Crosshair").actions.onToggle = function(on) crosshair.Visible = on end
 
+-- =========================================================
+-- NAMETAGS
+-- =========================================================
 local nametagFolder = Instance.new("Folder")
 nametagFolder.Name = "DesolateNameTags"; nametagFolder.Parent = hudGui
 local nametags = {}
@@ -1153,6 +1161,9 @@ Players.PlayerRemoving:Connect(function(plr)
     end
 end)
 
+-- =========================================================
+-- ESP (players)
+-- =========================================================
 local espHighlights = {}
 findMod("Render", "ESP").actions.onToggle = function(on)
     if on then
@@ -1173,6 +1184,230 @@ findMod("Render", "ESP").actions.onToggle = function(on)
     end
 end
 
+-- =========================================================
+-- GEN ESP (mana generators)
+-- =========================================================
+local genKeywords = {
+    "generator", "gen", "mana", "crystal", "fountain",
+    "orb", "essence", "shard", "rune", "altar", "beacon",
+    "pylon", "node", "vein", "core",
+}
+
+local trackedGens = {}   -- [part] = { box = SelectionBox, billboard = BillboardGui }
+local genEspMod = findMod("Render", "Gen ESP")
+local genLabelsMod = findMod("Render", "Gen Labels")
+
+local function isGen(part)
+    if not part:IsA("BasePart") then return false end
+    if part.Name == "" then return false end
+    if part:FindFirstChild("DesolateGenBox") then return false end
+    local n = part.Name:lower()
+    for _, kw in ipairs(genKeywords) do
+        if n:find(kw) then return true end
+    end
+    local parent = part.Parent
+    if parent and not parent:IsA("Workspace") and not parent:IsA("Model")
+        and not parent:IsA("Folder") then
+        local pn = parent.Name:lower()
+        for _, kw in ipairs(genKeywords) do
+            if pn:find(kw) then return true end
+        end
+    end
+    return false
+end
+
+local function addGenESP(part)
+    if trackedGens[part] then return end
+
+    local box = Instance.new("SelectionBox")
+    box.Name = "DesolateGenBox"
+    box.Adornee = part
+    box.Color3 = Color3.fromRGB(255, 220, 60)
+    box.LineThickness = genEspMod.sliders[2] and genEspMod.sliders[2].value or 0.08
+    box.SurfaceTransparency = 1
+    box.Parent = part
+
+    local bb = nil
+    if genLabelsMod.enabled then
+        bb = Instance.new("BillboardGui")
+        bb.Name = "DesolateGenLabel"
+        bb.Adornee = part
+        bb.Size = UDim2.new(0, 200, 0, 30)
+        bb.StudsOffset = Vector3.new(0, 3, 0)
+        bb.AlwaysOnTop = true
+        bb.LightInfluence = 0
+        bb.Parent = part
+
+        local bg = Instance.new("Frame")
+        bg.Size = UDim2.new(1, 0, 1, 0)
+        bg.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
+        bg.BackgroundTransparency = 0.25
+        bg.BorderSizePixel = 0
+        bg.Parent = bb
+        Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 6)
+
+        local accent = Instance.new("Frame")
+        accent.Size = UDim2.new(0, 3, 1, 0)
+        accent.BackgroundColor3 = Color3.fromRGB(255, 220, 60)
+        accent.BorderSizePixel = 0
+        accent.Parent = bg
+        Instance.new("UICorner", accent).CornerRadius = UDim.new(0, 6)
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Name = "Label"
+        lbl.BackgroundTransparency = 1
+        lbl.Position = UDim2.new(0, 10, 0, 0)
+        lbl.Size = UDim2.new(1, -14, 1, 0)
+        lbl.Font = FONT
+        lbl.TextSize = 12
+        lbl.TextColor3 = Color3.fromRGB(255, 220, 60)
+        lbl.TextXAlignment = Enum.TextXAlignment.Center
+        lbl.Text = part.Name
+        lbl.Parent = bg
+    end
+
+    trackedGens[part] = { box = box, billboard = bb, keyword = part.Name }
+end
+
+local function removeGenESP(part)
+    local entry = trackedGens[part]
+    if not entry then return end
+    if entry.box then pcall(function() entry.box:Destroy() end) end
+    if entry.billboard then pcall(function() entry.billboard:Destroy() end) end
+    trackedGens[part] = nil
+end
+
+local function clearAllGenESP()
+    for part in pairs(trackedGens) do
+        removeGenESP(part)
+    end
+    trackedGens = {}
+end
+
+genEspMod.actions.onToggle = function(on)
+    if on then
+        -- scan and add
+        local range = genEspMod.sliders[1] and genEspMod.sliders[1].value or 500
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if isGen(obj) then
+                local dist = (obj.Position - hrp.Position).Magnitude
+                if dist <= range then addGenESP(obj) end
+            end
+        end
+    else
+        clearAllGenESP()
+    end
+end
+
+genEspMod.actions.onSliderChange = function(idx, v)
+    if idx == 2 then
+        -- thickness
+        for _, entry in pairs(trackedGens) do
+            if entry.box then entry.box.LineThickness = v end
+        end
+    end
+end
+
+genLabelsMod.actions.onToggle = function(on)
+    if on then
+        -- add labels to tracked
+        for part, entry in pairs(trackedGens) do
+            if not entry.billboard then
+                local bb = Instance.new("BillboardGui")
+                bb.Name = "DesolateGenLabel"
+                bb.Adornee = part
+                bb.Size = UDim2.new(0, 200, 0, 30)
+                bb.StudsOffset = Vector3.new(0, 3, 0)
+                bb.AlwaysOnTop = true
+                bb.LightInfluence = 0
+                bb.Parent = part
+
+                local bg = Instance.new("Frame")
+                bg.Size = UDim2.new(1, 0, 1, 0)
+                bg.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
+                bg.BackgroundTransparency = 0.25
+                bg.BorderSizePixel = 0
+                bg.Parent = bb
+                Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 6)
+
+                local accent = Instance.new("Frame")
+                accent.Size = UDim2.new(0, 3, 1, 0)
+                accent.BackgroundColor3 = Color3.fromRGB(255, 220, 60)
+                accent.BorderSizePixel = 0
+                accent.Parent = bg
+                Instance.new("UICorner", accent).CornerRadius = UDim.new(0, 6)
+
+                local lbl = Instance.new("TextLabel")
+                lbl.Name = "Label"
+                lbl.BackgroundTransparency = 1
+                lbl.Position = UDim2.new(0, 10, 0, 0)
+                lbl.Size = UDim2.new(1, -14, 1, 0)
+                lbl.Font = FONT
+                lbl.TextSize = 12
+                lbl.TextColor3 = Color3.fromRGB(255, 220, 60)
+                lbl.TextXAlignment = Enum.TextXAlignment.Center
+                lbl.Text = part.Name
+                lbl.Parent = bg
+
+                entry.billboard = bb
+            end
+        end
+    else
+        for _, entry in pairs(trackedGens) do
+            if entry.billboard then
+                pcall(function() entry.billboard:Destroy() end)
+                entry.billboard = nil
+            end
+        end
+    end
+end
+
+-- Background scan loop
+task.spawn(function()
+    while gui.Parent do
+        if genEspMod.enabled then
+            local range = genEspMod.sliders[1] and genEspMod.sliders[1].value or 500
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                -- cleanup old
+                for part in pairs(trackedGens) do
+                    if not part or not part.Parent then removeGenESP(part) end
+                end
+                -- add new
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if not trackedGens[obj] and isGen(obj) then
+                        local dist = (obj.Position - hrp.Position).Magnitude
+                        if dist <= range then addGenESP(obj) end
+                    end
+                end
+                -- update distances in labels
+                if genLabelsMod.enabled then
+                    for part, entry in pairs(trackedGens) do
+                        if entry.billboard and entry.billboard.Parent then
+                            local bg = entry.billboard:FindFirstChildOfClass("Frame")
+                            if bg then
+                                local lbl = bg:FindFirstChild("Label")
+                                if lbl then
+                                    local d = (part.Position - hrp.Position).Magnitude
+                                    lbl.Text = string.format("%s [%dm]", part.Name, math.floor(d))
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(1)
+    end
+end)
+
+-- =========================================================
+-- JUMP CIRCLE / TRAILS / PARTICLES / SKY / CHINA HAT
+-- =========================================================
 local jumpRings = {}
 findMod("Render", "JumpCircle").actions.onToggle = function(on)
     if not on then
@@ -1320,10 +1555,8 @@ particlesMod.actions.onSliderChange = function(idx, v)
     local em = att:FindFirstChild("Emitter")
     if not em then return end
 
-    if idx == 1 then
-        em.Rate = v
-    elseif idx == 2 then
-        em.Speed = NumberRange.new(v)
+    if idx == 1 then em.Rate = v
+    elseif idx == 2 then em.Speed = NumberRange.new(v)
     elseif idx == 3 then
         em.Size = NumberSequence.new({
             NumberSequenceKeypoint.new(0, v / 5),
@@ -1338,81 +1571,15 @@ player.CharacterAdded:Connect(function()
     if particlesMod.enabled then buildParticles() end
 end)
 
--- Watchdog for particles
 RunService.Heartbeat:Connect(function()
     if not particlesMod.enabled then return end
     local char = player.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    if not hrp:FindFirstChild("DesolateFallingEmitter") then
-        buildParticles()
-    end
+    if not hrp:FindFirstChild("DesolateFallingEmitter") then buildParticles() end
 end)
 
--- =========================================================
--- CUSTOM AURA
--- =========================================================
-local auraPart = nil
-local auraMod = findMod("Render", "Custom Aura")
-
-local function destroyAura()
-    if auraPart and auraPart.Parent then
-        pcall(function() auraPart:Destroy() end)
-    end
-    auraPart = nil
-end
-
-auraMod.actions.onToggle = function(on)
-    if not on then destroyAura() end
-end
-
-RunService.Heartbeat:Connect(function(dt)
-    if not auraMod.enabled then
-        if auraPart then destroyAura() end
-        return
-    end
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    local radius = auraMod.slider.value
-
-    if not auraPart or not auraPart.Parent then
-        auraPart = Instance.new("Part")
-        auraPart.Name = "DesolateAura"
-        auraPart.Shape = Enum.PartType.Cylinder
-        auraPart.Material = Enum.Material.Neon
-        auraPart.Color = ACCENT
-        auraPart.Anchored = true
-        auraPart.CanCollide = false
-        auraPart.CanQuery = false
-        auraPart.CanTouch = false
-        auraPart.CastShadow = false
-        auraPart.LightInfluence = 0
-        auraPart.Transparency = 0.3
-        auraPart.Size = Vector3.new(0.15, radius * 2, radius * 2)
-        auraPart.Parent = Workspace
-    end
-
-    local t = tick()
-    local pulse = 1 + math.sin(t * 3) * 0.08
-    local finalR = radius * pulse
-    auraPart.Size = Vector3.new(0.15, finalR * 2, finalR * 2)
-    auraPart.CFrame = CFrame.new(hrp.Position - Vector3.new(0, 2.7, 0)) * CFrame.Angles(0, t * 1.5, math.rad(90))
-    auraPart.Color = ACCENT
-    auraPart.Transparency = 0.3
-end)
-
-player.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    if auraMod.enabled then destroyAura() end
-end)
-
--- =========================================================
--- SKY / FOG / CHINA HAT / TIME / DAMAGE IND
--- =========================================================
 local SKY_PRESETS = {
     { clockTime = 12,   ambient = Color3.fromRGB(128, 128, 128), outdoor = Color3.fromRGB(128, 128, 128), fogColor = Color3.fromRGB(200, 220, 255), fogEnd = 1000 },
     { clockTime = 17.5, ambient = Color3.fromRGB(90, 70, 80),    outdoor = Color3.fromRGB(140, 90, 80),   fogColor = Color3.fromRGB(255, 130, 80),  fogEnd = 500 },
