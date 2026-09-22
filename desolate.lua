@@ -2775,4 +2775,177 @@ if MOD.moonwalk.enabled and CACHE.humanoid then CACHE.humanoid.AutoRotate = fals
 syncPing()
 syncFetch()
 
+-- =========================================================
+-- PLAYER LIST (wrapped in do-end to save local registers)
+-- =========================================================
+do
+    local plGui = Instance.new("ScreenGui")
+    plGui.Name = "DesolatePL_" .. math.random(1, 1e6)
+    plGui.ResetOnSpawn = false; plGui.IgnoreGuiInset = true; plGui.DisplayOrder = 1002
+    if gethui then local ok, h = pcall(gethui); if ok and h then plGui.Parent = h end end
+    if not plGui.Parent then
+        local ok = pcall(function() plGui.Parent = game:GetService("CoreGui") end)
+        if not ok or not plGui.Parent then plGui.Parent = player:WaitForChild("PlayerGui") end
+    end
+
+    local plWindow = Instance.new("Frame")
+    plWindow.Size = UDim2.new(0, 340, 0, 420)
+    plWindow.Position = UDim2.new(0.5, -170, 0.5, -210)
+    plWindow.BackgroundColor3 = BG; plWindow.BorderSizePixel = 0
+    plWindow.Visible = false; plWindow.Active = true; plWindow.Parent = plGui
+    Instance.new("UICorner", plWindow).CornerRadius = UDim.new(0, 12)
+    local plStroke = Instance.new("UIStroke")
+    plStroke.Color = ACCENT; plStroke.Thickness = 1; plStroke.Transparency = 0.6; plStroke.Parent = plWindow
+
+    local plHeader = Instance.new("Frame")
+    plHeader.Size = UDim2.new(1, 0, 0, 32); plHeader.BackgroundColor3 = BG2
+    plHeader.BorderSizePixel = 0; plHeader.Parent = plWindow
+    Instance.new("UICorner", plHeader).CornerRadius = UDim.new(0, 12)
+    local plHMask = Instance.new("Frame")
+    plHMask.Size = UDim2.new(1, 0, 0, 10); plHMask.Position = UDim2.new(0, 0, 1, -10)
+    plHMask.BackgroundColor3 = BG2; plHMask.BorderSizePixel = 0; plHMask.Parent = plHeader
+
+    local plTitle = Instance.new("TextLabel")
+    plTitle.BackgroundTransparency = 1; plTitle.Position = UDim2.new(0, 12, 0, 0)
+    plTitle.Size = UDim2.new(1, -60, 1, 0); plTitle.Font = FONT; plTitle.TextSize = 13
+    plTitle.TextXAlignment = Enum.TextXAlignment.Left
+    plTitle.TextColor3 = ACCENT; plTitle.Text = "PLAYER LIST"; plTitle.Parent = plHeader
+
+    local plClose = Instance.new("TextButton")
+    plClose.Size = UDim2.new(0, 22, 0, 22); plClose.Position = UDim2.new(1, -28, 0, 5)
+    plClose.BackgroundColor3 = BG4; plClose.TextColor3 = TEXT; plClose.Font = FONT; plClose.TextSize = 12
+    plClose.Text = "X"; plClose.BorderSizePixel = 0; plClose.Parent = plHeader
+    Instance.new("UICorner", plClose).CornerRadius = UDim.new(0, 6)
+    plClose.MouseButton1Click:Connect(function()
+        plWindow.Visible = false
+        if MOD.playerList then MOD.playerList.enabled = false end
+        refreshModules()
+    end)
+
+    local plScroll = Instance.new("ScrollingFrame")
+    plScroll.Size = UDim2.new(1, -12, 1, -44); plScroll.Position = UDim2.new(0, 6, 0, 38)
+    plScroll.BackgroundTransparency = 1; plScroll.BorderSizePixel = 0
+    plScroll.ScrollBarThickness = 3; plScroll.ScrollBarImageColor3 = ACCENT
+    plScroll.CanvasSize = UDim2.new(0, 0, 0, 0); plScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    plScroll.Parent = plWindow
+    local plList = Instance.new("UIListLayout")
+    plList.Padding = UDim.new(0, 4); plList.Parent = plScroll
+
+    local plRows = {}
+
+    local function rebuildPlayerList()
+        for _, c in ipairs(plScroll:GetChildren()) do
+            if c:IsA("Frame") then c:Destroy() end
+        end
+        plRows = {}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            local row = Instance.new("Frame")
+            row.Size = UDim2.new(1, -6, 0, 40); row.BackgroundColor3 = BG3
+            row.BorderSizePixel = 0; row.Parent = plScroll
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+            local av = Instance.new("ImageLabel")
+            av.Size = UDim2.new(0, 32, 0, 32); av.Position = UDim2.new(0, 4, 0, 4)
+            av.BackgroundColor3 = BG2; av.BorderSizePixel = 0
+            av.Image = "rbxthumb://type=AvatarHeadShot&id=" .. plr.UserId .. "&w=150&h=150"
+            av.Parent = row
+            Instance.new("UICorner", av).CornerRadius = UDim.new(0, 999)
+
+            local nameLbl = Instance.new("TextLabel")
+            nameLbl.BackgroundTransparency = 1; nameLbl.Position = UDim2.new(0, 42, 0, 4)
+            nameLbl.Size = UDim2.new(1, -160, 0, 14); nameLbl.Font = FONT; nameLbl.TextSize = 11
+            nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+            nameLbl.TextColor3 = (plr == player) and ACCENT or TEXT
+            nameLbl.Text = plr.Name .. (plr == player and " (you)" or "")
+            nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+            nameLbl.Parent = row
+
+            local infoLbl = Instance.new("TextLabel")
+            infoLbl.BackgroundTransparency = 1; infoLbl.Position = UDim2.new(0, 42, 0, 20)
+            infoLbl.Size = UDim2.new(1, -160, 0, 14); infoLbl.Font = FONT; infoLbl.TextSize = 9
+            infoLbl.TextXAlignment = Enum.TextXAlignment.Left
+            infoLbl.TextColor3 = MUTED; infoLbl.Text = "HP: -- | --m"; infoLbl.Parent = row
+
+            local function mkBtn(text, xOff, onClick)
+                local b = Instance.new("TextButton")
+                b.Size = UDim2.new(0, 34, 0, 22); b.Position = UDim2.new(1, xOff, 0, 9)
+                b.BackgroundColor3 = BG4; b.TextColor3 = TEXT; b.Font = FONT; b.TextSize = 10
+                b.Text = text; b.BorderSizePixel = 0; b.Parent = row
+                Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+                b.MouseButton1Click:Connect(onClick)
+                return b
+            end
+
+            mkBtn("TP", -110, function()
+                if plr == player then return end
+                local myHrp = CACHE.hrp; if not myHrp then return end
+                local theirHrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                if theirHrp then myHrp.CFrame = theirHrp.CFrame * CFrame.new(0, 0, 3) end
+            end)
+            mkBtn("SP", -72, function()
+                if plr == player then return end
+                local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+                if hum then Camera.CameraSubject = hum end
+            end)
+            mkBtn("CP", -34, function()
+                if type(setclipboard) == "function" then pcall(setclipboard, plr.Name) end
+            end)
+
+            plRows[plr] = { row = row, name = nameLbl, info = infoLbl }
+        end
+    end
+
+    rebuildPlayerList()
+    Players.PlayerAdded:Connect(function() task.wait(0.2); rebuildPlayerList() end)
+    Players.PlayerRemoving:Connect(function() task.wait(0.2); rebuildPlayerList() end)
+
+    MOD.playerList.actions.onToggle = function(on)
+        plWindow.Visible = on
+        if on then rebuildPlayerList() end
+    end
+
+    task.spawn(function()
+        while gui.Parent do
+            if plWindow.Visible then
+                for plr, data in pairs(plRows) do
+                    if not plr or not plr.Parent then rebuildPlayerList(); break end
+                    if plr.Character then
+                        local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                        local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                        if hum and hrp then
+                            local dist = 0
+                            if CACHE.hrp then dist = (hrp.Position - CACHE.hrp.Position).Magnitude end
+                            data.info.Text = string.format("HP: %d/%d | %dm", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(dist))
+                        end
+                    end
+                end
+            end
+            task.wait(1)
+        end
+    end)
+
+    do
+        local dragging, dragStart, startPos
+        plHeader.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true; dragStart = input.Position; startPos = plWindow.Position
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - dragStart
+                plWindow.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+        end)
+    end
+
+    -- Init: если модуль был включён в конфиге — показать окно
+    if MOD.playerList and MOD.playerList.enabled then
+        plWindow.Visible = true
+        rebuildPlayerList()
+    end
+end
 print("[Desolate] v" .. VERSION .. " loaded - " .. player.Name)
